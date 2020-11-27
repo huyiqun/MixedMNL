@@ -1,0 +1,7 @@
+numpy
+scipy
+matplotlib
+coloredlogs
+tabulate
+pulp
+xlrd

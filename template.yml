@@ -1,0 +1,16 @@
+# number of consumers
+num_cons: 1000
+# number of consumer types
+num_type: 2
+# number of considered products
+num_prod: 2
+# number of product features
+num_feat: 1
+
+simulate: False
+save_data: False
+
+data:
+    product: data/product.csv
+    consumer: data/consumer.csv
+
