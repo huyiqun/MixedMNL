@@ -17,7 +17,7 @@ class ColoredLog(object):
 
     """Docstring for ColoredLog. """
 
-    def __init__(self, logger_name, verbose=0, file_handler=None):
+    def __init__(self, logger_name, verbose=3, file_handler=None):
         self._verbose = verbose
         self._level = self.log_level()
         self.file_handler = file_handler

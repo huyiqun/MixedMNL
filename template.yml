@@ -1,3 +1,5 @@
+# experiment save directory
+exp_dir: default
 # number of consumers
 num_cons: 1000
 # number of consumer types
@@ -6,11 +8,11 @@ num_type: 2
 num_prod: 2
 # number of product features
 num_feat: 1
+# sampling percent
+sample_ratio: 0.2
+
+product_data: data/product.csv
+consumer_data: data/consumer.csv
 
 simulate: False
 save_data: False
-
-data:
-    product: data/product.csv
-    consumer: data/consumer.csv
-

@@ -5,6 +5,7 @@ from scipy.optimize import minimize, LinearConstraint, Bounds
 from simulate_util import Population, Product_Set
 from logging_util import ColoredLog
 from settings import VERBOSE, EXP_PER_CYC, SIM_PER_EXP, TRANS_PER_EXP, SAMPLE_RATIO
+DEFAULT_VERBOSE = 3
 
 Params = namedtuple("Params", ["alpha", "beta"])
 old_settings = np.geterr()
@@ -17,7 +18,6 @@ class Params(namedtuple("Params", ["alpha", "beta", "choice"], defaults=[None, N
 
     @property
     def table(self):
-        #  k = len(self.alpha)
         mat = self.alpha[:, np.newaxis]
         header = ["alpha"]
         if self.beta is not None:
@@ -217,52 +217,6 @@ class Cycle(object):
 
         return exp
 
-    def alpha_beta_estimate(self, trans_data):
-        num_types = len(self.params.alpha)
-        num_features = len(self.pop.preference_vec[0])
-
-        num_trans = len(trans_data)
-        n = num_trans * SAMPLE_RATIO
-        sub_trans = trans_data[np.random.choice(num_trans, int(n), replace=True)]
-        sub_ms = np.mean(sub_trans, axis=0)
-        #  print(sub_ms)
-        #  self.experiment_info
-
-        def obj(beta):
-            y = np.reshape(beta, (num_types, (num_features + 1)))
-            alpha = y[:, 0][:, np.newaxis]
-            x = y[:, 1:]
-            q = np.array([self.ps.choice_prob_vec(i) for i in x])
-            calculated_market_share = np.sum(alpha * q, axis=0)
-            diff = sub_ms - calculated_market_share
-            #  diff = self.simulated_market_share - calculated_market_share
-            return np.linalg.norm(diff) ** 2
-
-        flen = num_types * (num_features + 1)
-        x0 = map(float, np.random.randint(-5, 6, size=(flen,)))
-        lb = np.array([-np.inf] * flen)
-        ub = np.array([np.inf] * flen)
-        A = np.zeros(flen)
-        for i in range(num_types):
-            lb[i * (num_features + 1)] = 0
-            ub[i * (num_features + 1)] = 1
-            A[i * (num_features + 1)] = 1
-
-        bnds = Bounds(lb, ub)
-        cons = LinearConstraint(A, 1, 1)
-
-        init = np.array(list(x0))
-        np.seterr(all="ignore")
-        while True:
-            res = minimize(obj, init, bounds=bnds, constraints=cons, tol=1e-6)
-            if res.success:
-                break
-        np.seterr(all="raise")
-        #  self.logger.info(beta_hat)
-        ans = np.reshape(res.x, (num_types, (num_features + 1)))
-        alpha_hat, beta_hat = ans[:, 0], ans[:, 1:]
-
-        return alpha_hat, beta_hat
 
     def construct_beta_set(self):
         betas = np.array(self.estimated_beta)
@@ -278,65 +232,84 @@ class Cycle(object):
         self.ps.set_price(self.current_price)
 
 
-class Experiment(object):
-    def __init__(self, product_set, population, verbose=VERBOSE):
+class Simulator(object):
+    def __init__(self, product_set, population, exp_price, verbose=DEFAULT_VERBOSE):
+        self.logger = ColoredLog(self.__class__.__name__, verbose=verbose)
         self.ps = product_set
         self.pop = population
-        self.calculate_groud_truth()
-        self.logger = ColoredLog(self.__class__.__name__, verbose=verbose)
-        self.print_experiment_info()
+        self.exp_price = exp_price
+        self.T = len(exp_price)
+        self. simulate_consumer()
 
-    def calculate_groud_truth(self):
-        n = self.ps.num_prod + 1
-        K = self.pop.num_types
-        self.choice_prob_dict = {}
-        self.theoretical_market_share = np.zeros(n)
-        for k in range(K):
-            p_vec = self.ps.choice_prob_vec(self.pop.preference_vec[k], calc_true=True)
-            self.choice_prob_dict[self.pop.cluster_id[k]] = p_vec
-            self.theoretical_market_share += self.pop.alpha[k] * p_vec
-
-    def simulate(self, num_transaction=TRANS_PER_EXP):
-        self.num_transaction = num_transaction
-        n = self.ps.num_prod + 1
-        self.sim_data = defaultdict(lambda: np.zeros(n))
+    def simulate_consumer(self, num_cons=1000):
+        self.num_cons = num_cons
         self.type_dict = {}
 
-        for i in range(num_transaction):
-            t = self.pop.cluster_id[
+        for i in range(num_cons):
+            tp = self.pop.cluster_id[
                 int(np.random.choice(self.pop.num_types, 1, p=self.pop.alpha))
             ]
-            self.type_dict[i] = t
+            self.type_dict[i] = tp
 
-            purchase_decision = np.random.choice(
-                self.ps.num_prod + 1, 1, p=self.choice_prob_dict[t]
-            )
-            self.sim_data[i][purchase_decision] = 1
-
-        self.transaction_data_matrix = np.array(list(self.sim_data.values()))
-        self.simulated_market_share = np.mean(self.transaction_data_matrix, axis=0)
-        self.print_simulate_info()
-
-    def print_simulate_info(self):
-        self.logger.debug(f"Simulated transactions: {self.num_transaction}")
         ct = Counter(self.type_dict.values())
-        type_mat = [
-            [ct[cid], float(ct[cid]) / self.num_transaction]
+        type_res = [
+            [ct[cid], float(ct[cid]) / num_cons]
             for cid in self.pop.cluster_id
         ]
-
         self.logger.debug(
-            type_mat,
+            type_res,
             caption="Simulated types",
             header=["Number", "Percent"],
             index=self.pop.cid,
         )
+
+    def calculate_groud_truth(self, price):
+        K = self.pop.num_type
+        choice_prob_dict = {}
+        ms = np.zeros(self.ps.num_prod + 1)
+        for k in range(K):
+            p_vec = self.ps.choice_prob_vec(self.pop.preference_vec[k], price)
+            choice_prob_dict[self.pop.cluster_id[k]] = p_vec
+            ms = self.pop.alpha[k] * p_vec
+        return choice_prob_dict, ms
+
+    def simulate_transaction(self, choice_prob_dict):
+        m = self.ps.num_prod + 1
+        sim_data = np.zeros((self.num_cons, m))
+
+        for i in range(self.num_cons):
+            tp = self.type_dict[i]
+            purchase = np.random.choice(
+                m, 1, p=choice_prob_dict[tp]
+            )
+            sim_data[i, purchase] = 1
+
+        return sim_data
+
+    def run_experiments(self):
+        self.data_hist = {}
+        self.theoretical_market_share = {}
+        self.simulated_market_share = {}
+        for t, p in enumerate(self.exp_price):
+            choice_prob_dict, ms = self.calculate_groud_truth(p)
+            self.theoretical_market_share[t] = ms
+            sim_data = self.simulate_transaction(t, choice_prob_dict)
+            self.data_hist[t] = sim_data
+            self.simulated_market_share[t] = np.mean(sim_data, axis=0)
+            
+
+        self.personal_cdf = {i: np.mean([hist[i] for _, hist in self.data_hist.items()], axis=0) for i in range(self.num_cons)}
+
+
+    def print_simulate_info(self):
+        self.logger.debug(f"Simulated transactions: {self.num_transaction}")
         self.logger.debug(
             [self.simulated_market_share],
             header=self.ps.pid + ["Offset"],
             index=["Simulated Market Share"],
         )
 
+            # self.personal_cdf[i][purchase_decision]
     def print_experiment_info(self):
         self.logger.debug(
             [self.ps.prices], header=self.ps.pid, index=["Experiment Price"]
