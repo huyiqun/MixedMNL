@@ -5,6 +5,7 @@ from collections import namedtuple, OrderedDict
 import numpy as np
 from scipy.optimize import minimize, linprog
 
+from experiment import Simulator
 from learning import OnlineLearning, Experiment, Params
 from logging_util import ColoredLog
 from simulate_util import Product_Set, Population
@@ -131,7 +132,14 @@ class FrankWolfe(object):
             #  self.index_mask[-1] = 0
 
         return self.alpha_masked
-
+def main(ps, pop, N, K, M, d):
+    sim = Simulator(ps, pop, verbose=4)
+    sim.type_dict[0]
+    sim.run_experiments([[1,1]])
+    sim.run_experiments(np.random.uniform(low=0.5, high=1.5, size=(50, M)))
+    sim.theoretical_market_share
+    sim.simulated_market_share
+    sim.personal_cdf
 
 class SubRegionFrankWolfe(object):
     """docstring for FrankWolfe"""

@@ -14,7 +14,7 @@ class Population(object):
 
         self.cid = [f"Type {letter}" for letter in self.cluster_id]
         self.logger = ColoredLog(self.__class__.__name__, verbose=verbose)
-        self.logger.info(self.info, caption="Consumer info", index=self.cid)
+        self.show_info()
 
     @classmethod
     def from_data(cls, data, **kwargs):
@@ -50,14 +50,13 @@ class Population(object):
                 self.preference_vec = rand_data.astype(float)
                 break
 
-    @property
-    def info(self):
+    def show_info(self):
         num_feat = len(self.preference_vec[0])
         table_title = ["alpha"] + [f"Feature {j+1}" for j in range(num_feat)]
         alpha_mat = [[a] for a in self.alpha]
         data_mat = np.append(alpha_mat, self.preference_vec, axis=1)
         table = np.vstack((table_title, data_mat))
-        return table
+        self.logger.info(table, caption="Consumer info", index=self.cid)
 
     def save(self, filename):
         data = []
@@ -86,7 +85,7 @@ class Product_Set(object):
         self.pid = [f"Product {i}" for i in self.prod_id]
         self.pid_off = self.pid + ["Offset"]
         self.logger = ColoredLog(self.__class__.__name__, verbose=verbose)
-        self.logger.info(self.info, caption="Product info", index=self.pid)
+        self.show_info()
 
     @classmethod
     def from_data(cls, data, **kwargs):
@@ -98,15 +97,13 @@ class Product_Set(object):
 
     def parse_data(self, data):
         self.prod_id = []
-        self.prices = []
         self.features = []
         with open(data, "r") as f:
             for l in f:
-                prod_id, price, *feature = l.strip().split(",")
+                prod_id, *feature = l.strip().split(",")
                 feature = list(map(float, feature))
 
                 self.prod_id.append(prod_id)
-                self.prices.append(float(price))
                 self.features.append(feature)
 
         self.num_prod = len(self.prod_id)
@@ -115,7 +112,6 @@ class Product_Set(object):
     def simulate(self, num_prod, num_feat):
         self.prod_id = [i + 1 for i in range(num_prod)]
         self.num_prod = num_prod
-        self.prices = np.ones(self.num_prod)
         self.num_feat = num_feat
         while True:
             rand_data = np.random.uniform(low=0, high=2, size=(num_prod, num_feat))
@@ -123,17 +119,10 @@ class Product_Set(object):
                 self.features = rand_data.astype(float)
                 break
 
-    @property
-    def info(self):
+    def show_info(self):
         num_feat = len(self.features[0])
-        table_title = [f"Feature {j+1}" for j in range(num_feat)] + ["Price"]
-        price_mat = [[p] for p in self.prices]
-        data_mat = np.append(self.features, price_mat, axis=1)
-        table = np.vstack((table_title, data_mat))
-        return table
-
-    def set_price(self, new_prices):
-        self.prices = [p for p in new_prices]
+        table_title = [f"Feature {j+1}" for j in range(num_feat)]
+        self.logger.info(self.features, caption="Product info", header=table_title, index=self.pid)
 
     def _exp_vec(self, weights, prices):
         return [
@@ -147,12 +136,8 @@ class Product_Set(object):
         expsum = logsumexp(t)
         return expnom, expsum
 
-    def choice_prob_vec(self, weights, prices=None):
-        if prices is not None:
-            v, s = self._exp_calc(weights, prices)
-        else:
-            v, s = self._exp_calc(weights, self.prices)
-
+    def choice_prob_vec(self, weights, prices):
+        v, s = self._exp_calc(weights, prices)
         vec = [t / (np.exp(s) + 1) for t in v] + [1 / (np.exp(s) + 1)]
         return np.array(vec)
 
@@ -165,7 +150,7 @@ class Product_Set(object):
     def save(self, filename):
         data = []
         for j in range(self.num_prod):
-            row = f"{self.prod_id[j]},{self.prices[j]}," + ",".join(
+            row = f"{self.prod_id[j]}," + ",".join(
                 list(map(str, self.features[j]))
             )
             data.append(row)

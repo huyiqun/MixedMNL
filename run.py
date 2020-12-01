@@ -82,6 +82,7 @@ else:
     d = ps.num_feat
 
 pop.__dict__
+pop.alpha
 vars(args)
 res = SubRegionFrankWolfe()
 

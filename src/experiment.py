@@ -50,7 +50,7 @@ class OfflineLearning(Learning):
         self.price_trace = [[p for p in self.ps.prices]]
         self.trace_index = ["Initialization"]
 
-        if self.pop.num_types > 1:
+        if self.pop.num_type > 1:
             k = estimate_k
             self.params = Params(alpha=np.array([float(1) / k] * k))
         else:
@@ -82,7 +82,7 @@ class OnlineLearning(Learning):
         self.price_trace = [[p for p in self.ps.prices]]
         self.trace_index = ["Initialization"]
 
-        if self.pop.num_types > 1:
+        if self.pop.num_type > 1:
             k = estimate_k
             self.params = Params(alpha=np.array([float(1) / k] * k))
         else:
@@ -233,21 +233,20 @@ class Cycle(object):
 
 
 class Simulator(object):
-    def __init__(self, product_set, population, exp_price, verbose=DEFAULT_VERBOSE):
+    def __init__(self, product_set, population, num_cons=1000, verbose=DEFAULT_VERBOSE):
         self.logger = ColoredLog(self.__class__.__name__, verbose=verbose)
         self.ps = product_set
         self.pop = population
-        self.exp_price = exp_price
-        self.T = len(exp_price)
-        self. simulate_consumer()
+        self.num_cons = num_cons
+        self.simulate_consumer(num_cons)
 
-    def simulate_consumer(self, num_cons=1000):
+    def simulate_consumer(self, num_cons):
         self.num_cons = num_cons
         self.type_dict = {}
 
         for i in range(num_cons):
             tp = self.pop.cluster_id[
-                int(np.random.choice(self.pop.num_types, 1, p=self.pop.alpha))
+                int(np.random.choice(self.pop.num_type, 1, p=self.pop.alpha))
             ]
             self.type_dict[i] = tp
 
@@ -270,7 +269,7 @@ class Simulator(object):
         for k in range(K):
             p_vec = self.ps.choice_prob_vec(self.pop.preference_vec[k], price)
             choice_prob_dict[self.pop.cluster_id[k]] = p_vec
-            ms = self.pop.alpha[k] * p_vec
+            ms += self.pop.alpha[k] * p_vec
         return choice_prob_dict, ms
 
     def simulate_transaction(self, choice_prob_dict):
@@ -286,19 +285,28 @@ class Simulator(object):
 
         return sim_data
 
-    def run_experiments(self):
+    def run_experiments(self, exp_price):
+        self.exp_price = exp_price
+        self.T = len(exp_price)
         self.data_hist = {}
         self.theoretical_market_share = {}
         self.simulated_market_share = {}
+
         for t, p in enumerate(self.exp_price):
             choice_prob_dict, ms = self.calculate_groud_truth(p)
             self.theoretical_market_share[t] = ms
-            sim_data = self.simulate_transaction(t, choice_prob_dict)
+            sim_data = self.simulate_transaction(choice_prob_dict)
             self.data_hist[t] = sim_data
             self.simulated_market_share[t] = np.mean(sim_data, axis=0)
-            
 
-        self.personal_cdf = {i: np.mean([hist[i] for _, hist in self.data_hist.items()], axis=0) for i in range(self.num_cons)}
+            self.logger.info(f"Experiment: {t}; price: {p}")
+            self.logger.debug(np.vstack((self.theoretical_market_share[t], self.simulated_market_share[t])), caption=f"Market Share", header = self.ps.pid_off, index=["Thoretical", "Simulated"])
+
+        self.personal_cdf = {i: np.cumsum(np.mean([hist[i] for _, hist in self.data_hist.items()], axis=0)) for i in range(self.num_cons)}
+
+def f():
+    return
+
 
 
     def print_simulate_info(self):
@@ -323,7 +331,7 @@ class Simulator(object):
         self.logger.debug(self.choice_prob_dict, header="keys", caption="Ground truth")
 
     def alpha_beta_estimate(self, alpha, sample_percent=SAMPLE_RATIO):
-        num_types = len(alpha)
+        num_type = len(alpha)
         num_features = len(self.pop.preference_vec[0])
         n = self.num_transaction * sample_percent
 
@@ -335,7 +343,7 @@ class Simulator(object):
         #  self.experiment_info
 
         def obj(beta):
-            y = np.reshape(beta, (num_types, (num_features + 1)))
+            y = np.reshape(beta, (num_type, (num_features + 1)))
             alpha = y[:, 0][:, np.newaxis]
             x = y[:, 1:]
             q = np.array([self.ps.choice_prob_vec(i) for i in x])
@@ -344,12 +352,12 @@ class Simulator(object):
             #  diff = self.simulated_market_share - calculated_market_share
             return np.linalg.norm(diff) ** 2
 
-        flen = num_types * (num_features + 1)
+        flen = num_type * (num_features + 1)
         x0 = map(float, np.random.randint(-5, 6, size=(flen,)))
         lb = np.array([-np.inf] * flen)
         ub = np.array([np.inf] * flen)
         A = np.zeros(flen)
-        for i in range(num_types):
+        for i in range(num_type):
             lb[i * (num_features + 1)] = 0
             ub[i * (num_features + 1)] = 1
             A[i * (num_features + 1)] = 1
@@ -362,7 +370,7 @@ class Simulator(object):
         res = minimize(obj, init, bounds=bnds, constraints=cons, tol=1e-6)
         np.seterr(all="raise")
         #  self.logger.info(beta_hat)
-        ans = np.reshape(res.x, (num_types, (num_features + 1)))
+        ans = np.reshape(res.x, (num_type, (num_features + 1)))
         alpha_hat, beta_hat = ans[:, 0], ans[:, 1:]
 
         return alpha_hat, beta_hat
@@ -379,19 +387,19 @@ if __name__ == "__main__":
 
     #  def beta_estimate(self, alpha):
     #  alpha = np.array(alpha)[:, np.newaxis]
-    #  num_types = len(alpha)
+    #  num_type = len(alpha)
     #  num_features = len(self.pop.preference_vec[0])
 
     #  def obj(beta):
-    #  x = np.reshape(beta, (num_types, num_features))
+    #  x = np.reshape(beta, (num_type, num_features))
     #  q = np.array([self.ps.choice_prob_vec(i) for i in x])
     #  calculated_market_share = np.sum(alpha * q, axis=0)
     #  diff = self.simulated_market_share - calculated_market_share
     #  return np.linalg.norm(diff) ** 2
 
-    #  x0 = map(float, np.random.randint(-5, 6, size=(num_types * num_features,)))
+    #  x0 = map(float, np.random.randint(-5, 6, size=(num_type * num_features,)))
     #  init = np.array(list(x0))
     #  beta_hat = minimize(obj, init, tol=1e-3)
     #  self.logger.info(beta_hat)
 
-    #  return np.reshape(beta_hat.x, (num_types, num_features))
+    #  return np.reshape(beta_hat.x, (num_type, num_features))
