@@ -140,6 +140,7 @@ def main(ps, pop, N, K, M, d):
     sim.theoretical_market_share
     sim.simulated_market_share
     sim.personal_cdf
+    np.linalg.norm(sim.personal_cdf[998] - sim.personal_cdf[999])
 
 class SubRegionFrankWolfe(object):
     """docstring for FrankWolfe"""
