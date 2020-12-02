@@ -16,8 +16,8 @@ except:
 
 sys.path.append(os.path.join(project_root, "src"))
 # import importlib
-# importlib.reload(simulate_util)
-# import simulate_util
+# importlib.reload(logging_util)
+# import logging_util
 from logging_util import ColoredLog
 from simulate_util import Population, Product_Set
 from srfw import SubRegionFrankWolfe
@@ -66,14 +66,14 @@ if args.simulate:
     if args.save_data:
         if os.path.isdir(exp_dir):
             rmtree(exp_dir)
-        os.mkdir(exp_dir)
+        os.makedirs(exp_dir)
         pop.save(os.path.join(exp_dir, "consumer.csv"))
         ps.save(os.path.join(exp_dir, "product.csv"))
 else:
     exp_dir = os.path.join(project_root, "experiments", args.exp_dir)
     if os.path.isdir(exp_dir):
         rmtree(exp_dir)
-    os.mkdir(exp_dir)
+    os.makedirs(exp_dir)
     pop = Population.from_data(args.consumer_data, verbose=VERBOSE)
     ps = Product_Set.from_data(args.product_data, verbose=VERBOSE)
     N = args.num_cons

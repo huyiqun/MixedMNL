@@ -1,5 +1,6 @@
 from collections import Counter, defaultdict, namedtuple, OrderedDict
 import numpy as np
+from sklearn.metrics import pairwise_distances
 from tabulate import tabulate
 from scipy.optimize import minimize, LinearConstraint, Bounds
 from simulate_util import Population, Product_Set
@@ -303,6 +304,38 @@ class Simulator(object):
             self.logger.debug(np.vstack((self.theoretical_market_share[t], self.simulated_market_share[t])), caption=f"Market Share", header = self.ps.pid_off, index=["Thoretical", "Simulated"])
 
         self.personal_cdf = {i: np.cumsum(np.mean([hist[i] for _, hist in self.data_hist.items()], axis=0)) for i in range(self.num_cons)}
+
+class Sampler(object):
+
+    def __init__(self, cdf_dict, type_dict, verbose=DEFAULT_VERBOSE):
+        self.cdf_dict = cdf_dict
+        self.type_dict = type_dict
+        self.cdf_mat = np.array(list(self.cdf_dict.values()))
+        self.score = pairwise_distances(self.cdf_mat, metric=lambda x, y: np.linalg.norm(x-y, ord=np.inf))
+        # self.score = [[np.linalg.norm(vi-vj, ord=np.inf) for j, vj in self.cdf_dict.items()] for i, vi in self.cdf_dict.items()]
+        self.num_cons = len(self.cdf_dict)
+        self.logger = ColoredLog(self.__class__.__name__, verbose=verbose)
+
+    def create_sample(self, seed, num_samp, samp_func):
+        samp_prob = [samp_func(sj) for sj in self.score[seed]]
+        samp_prob = [s / sum(samp_prob) for s in samp_prob]
+        sample = np.random.choice(self.num_cons, size=num_samp, p=samp_prob)
+        self.logger.debug(self.type_dict[seed])
+        types = [self.type_dict[i] for i in sample]
+        ct = Counter(types)
+        print(ct)
+        return sample
+
+N = 10
+M
+
+sampler = Sampler(sim.personal_cdf, sim.type_dict, verbose=4)
+sampler.create_sample(0, 200, lambda x: 1-x)
+
+len(sampler.score)
+
+
+
 
 def f():
     return
