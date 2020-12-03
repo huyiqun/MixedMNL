@@ -333,68 +333,6 @@ class Sampler(object):
         return samp_prob, sample
 
 
-
-
-def main(ps, pop, N, K, M, d):
-    sim = Simulator(ps, pop, verbose=3)
-    sim.type_dict[0]
-    sim.run_experiments(np.random.uniform(low=0.5, high=1.5, size=(100, M)))
-    sim.choice_prob_dict
-    sim.theoretical_market_share
-    sim.simulated_market_share
-    sim.personal_cdf
-    np.linalg.norm(sim.personal_cdf[998] - sim.personal_cdf[999])
-
-sampler = Sampler(sim.personal_cdf, sim.type_dict, sim.member, verbose=4)
-beta_set = []
-seeds = []
-for _ in range(20):
-    seed = np.random.randint(sim.num_cons)
-    seeds.append(sim.type_dict[seed])
-    pp, ss = sampler.create_sample(seed, 200, lambda x: max(1-10*x, 1e-4))
-    # pp, ss = sampler.create_sample(np.random.randint(sim.num_cons), 200, lambda x: np.exp(-10*x))
-    res = minimize(lambda x: loss(x, sim, ss), np.random.rand(2), tol=1e-6)
-    print(res)
-    beta_set.append(res.x)
-
-for i, b in enumerate(beta_set):
-    print(seeds[i])
-    print(sim.ps.choice_prob_vec(b, [1,1]))
-
-sim.ps.choice_prob_vec([1,-1], [1,1])
-sim.ps.choice_prob_vec([-1,1], [1,1])
-
-sim.choice_prob_dict
-
-cmap = {"A": "red", "B": "green"}
-A = []
-B = []
-for i in range(20):
-    if seeds[i] == "A":
-        A.append(beta_set[i])
-    else:
-        B.append(beta_set[i])
-
-cho
-plt.vline()
-
-
-fig = plt.figure(figsize=(20,16))
-ax = fig.add_subplot(1, 1, 1, projection="3d")
-ax.view_init(elev=45.0, azim=45)
-ax.scatter(yy[:, 0], yy[:, 1], yy[:, 2], c="blue", alpha=0.25)
-ax.plot_surface(
-    np.array([[0, 1], [0, 0]]),
-    np.array([[0, 0], [1, 1]]),
-    np.array([[1, 0], [0, 0]]),
-    alpha=0.2,
-)
-for i in range(20):
-    ax.scatter(*(sim.ps.choice_prob_vec(beta_set[i], np.ones(2))), c=cmap[seeds[i]], alpha=0.25)
-
-ax.scatter(*sim.ps.choice_prob_vec(pop.preference_vec[0], np.ones(2)), c="orange")
-ax.scatter(*sim.ps.choice_prob_vec(pop.preference_vec[1], np.ones(2)), c="orange")
-
 def loss(x, sim, ss):
     diff = [
             np.mean(v[ss], axis=0) - sim.ps.choice_prob_vec(x, sim.exp_price[t])
@@ -404,45 +342,75 @@ def loss(x, sim, ss):
     return loss
 
 
+def main(ps, pop, N, K, M, d):
+    sim = Simulator(ps, pop, verbose=4)
+    sim.type_dict[0]
+    sim.run_experiments(np.random.uniform(low=0.5, high=1.5, size=(500, M)))
+    sim.run_experiments([[1,1]]*100)
+    sim.choice_prob_dict
+    sim.theoretical_market_share
+    sim.simulated_market_share
+    sim.personal_cdf
+    np.linalg.norm(sim.personal_cdf[998] - sim.personal_cdf[999])
 
-func = lambda x: np.linalg.norm(ms - sim.ps.choice_prob_vec(x, sim.exp_price[0])) ** 2
-for mth in ["Nelder-Mead", "CG", "BFGS"]:
-    res = minimize(func, np.random.rand(2), method=mth)
-    print(mth, res)
-res
-res.message
+sampler = Sampler(sim.personal_cdf, sim.type_dict, sim.member, verbose=4)
+beta_set = []
+seeds = []
+estimators = defaultdict(list)
 
-np.mean([v for i, v in sim.personal_cdf.items() if i in A], axis=0)
-np.mean([v for i, v in sim.personal_cdf.items() if i in B], axis=0)
-sim.choice_prob_dict[3]
-ps.show_info()
-pop.show_info()
-A = np.array([i for i in range(1000) if sim.type_dict[i] == 'A'])
-B = np.array([i for i in range(1000) if sim.type_dict[i] == 'B'])
-sampler.score[A].shape
-A.shape
-B.shape
+for _ in range(20):
+    seed = np.random.randint(sim.num_cons)
+    tp = sim.type_dict[seed]
+    seeds.append(tp)
+    pp, ss = sampler.create_sample(seed, 200, lambda x: max(1-10*x, 1e-4))
+    # pp, ss = sampler.create_sample(np.random.randint(sim.num_cons), 200, lambda x: np.exp(-10*x))
+    res = minimize(lambda x: loss(x, sim, ss), np.random.rand(2), tol=1e-6)
+    print(res)
+    beta_set.append(res.x)
+    estimators[tp].append(sim.ps.choice_prob_vec(res.x, np.ones(2)))
 
-pp, ss = sampler.create_sample(0, 200, lambda x: max(1-10*x, 5e-4))
+estimators["A"]
+estimators["B"]
 
-pp
-for i in range(1000):
-    print(i, sim.type_dict[i], sim.personal_cdf[i])
-sim.type_dict[0]
-sim.simulated_market_share
-sim.choice_prob_dict
-plt.ioff()
-plt.plot(np.arange(M+1), sim.choice_prob_dict[9]['A'])
-plt.plot(np.arange(M+1), sim.choice_prob_dict[9]['B'])
-print(sim.type_dict[0], np.mean(np.array(pp)[sim.member[sim.type_dict[0]]]))
-for tt in sim.member:
-    if tt != sim.type_dict[0]:
-        print(tt, np.mean(np.array(pp)[sim.member[tt]]))
-sampler.score
+sim = Simulator(ps, pop, verbose=4)
+all_est = {}
 
-len(sampler.score)
+T = 300
+for T in np.arange(10, 510, 10):
+    sim.run_experiments(np.random.uniform(low=0.5, high=1.5, size=(T, M)))
+    sampler = Sampler(sim.personal_cdf, sim.type_dict, sim.member, verbose=4)
+    beta_set = []
+    seeds = []
+    estimators = defaultdict(list)
+
+    for _ in range(20):
+        seed = np.random.randint(sim.num_cons)
+        tp = sim.type_dict[seed]
+        seeds.append(tp)
+        pp, ss = sampler.create_sample(seed, 200, lambda x: max(1-10*x, 1e-4))
+        res = minimize(lambda x: loss(x, sim, ss), np.random.rand(2), tol=1e-6)
+        beta_set.append(res.x)
+        estimators[tp].append(sim.ps.choice_prob_vec(res.x, np.ones(2)))
+    all_est[T] = estimators
+
+estimators
+plt.hist(np.asarray(estimators["A"])[:, 1])
+
+xx = []
+yy = defaultdict(list)
+for t, dic in all_est.items():
+    xx.append(t)
+    for tp, vec in pop.preference_dict.items():
+        tr = ps.choice_prob_vec(vec, np.ones(2))
+        tse = np.mean([np.linalg.norm(tr - ee) ** 2 for ee in dic[tp]])
+        yy[tp].append(tse)
 
 
+for t, e in yy.items():
+    plt.plot(xx, e, label=f"Type {t}")
+    plt.xlabel("Number of Experiments")
+    plt.ylabel("MSE for MNL Estimation")
+plt.legend()
 
 
 def f():

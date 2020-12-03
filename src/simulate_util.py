@@ -28,14 +28,16 @@ class Population(object):
         self.cluster_id = []
         self.alpha = []
         self.preference_vec = []
+        self.preference_dict = {}
         with open(data, "r") as f:
             for l in f:
-                type, alpha, *pref_vec = l.strip().split(",")
+                ctype, alpha, *pref_vec = l.strip().split(",")
                 pref_vec = list(map(float, pref_vec))
 
-                self.cluster_id.append(type)
+                self.cluster_id.append(ctype)
                 self.alpha.append(float(alpha))
                 self.preference_vec.append(pref_vec)
+                self.preference_dict[ctype] = pref_vec
 
         self.num_type = len(self.cluster_id)
 
@@ -44,10 +46,12 @@ class Population(object):
         self.num_type = num_type
         rand_num = np.random.choice(range(10, 510, 20), num_type, replace=False)
         self.alpha = [x / sum(rand_num) for x in rand_num]
+        self.preference_dict = {}
         while True:
             rand_data = np.random.uniform(low=0, high=2, size=(num_type, num_feat))
             if len(np.unique(rand_data, axis=0)) == self.num_type:
                 self.preference_vec = rand_data.astype(float)
+                self.preference_dict = {self.cluster_id[i]: rand_data[i] for i in range(num_type)}
                 break
 
     def show_info(self):
@@ -83,7 +87,7 @@ class Product_Set(object):
             self.simulate(num_prod, num_feat)
 
         self.pid = [f"Product {i}" for i in self.prod_id]
-        self.pid_off = self.pid + ["Offset"]
+        self.pid_off = ["Offset"] + self.pid
         self.logger = ColoredLog(self.__class__.__name__, verbose=verbose)
         self.show_info()
 
@@ -138,14 +142,11 @@ class Product_Set(object):
 
     def choice_prob_vec(self, weights, prices):
         v, s = self._exp_calc(weights, prices)
-        vec = [t / (np.exp(s) + 1) for t in v] + [1 / (np.exp(s) + 1)]
+        vec = [1 / (np.exp(s) + 1)] + [t / (np.exp(s) + 1) for t in v]
         return np.array(vec)
 
     def choice_prob(self, weights, i):
-        if i == 0:
-            return self.choice_prob_vec(weights)[-1]
-        else:
-            return self.choice_prob_vec(weights)[i - 1]
+        return self.choice_prob_vec(weights)[i]
 
     def save(self, filename):
         data = []

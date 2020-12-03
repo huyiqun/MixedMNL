@@ -74,8 +74,6 @@ class FrankWolfe(object):
         self.choice_prob_mat = np.append(self.choice_prob_mat, q[np.newaxis, :], axis=0)
         self.index_mask = np.append(self.index_mask, [1])
         self.alpha = np.append(self.alpha, [0])
-        #  self.index_mask.append(1)
-        #  self.alpha.append(0)
 
         return q
 
