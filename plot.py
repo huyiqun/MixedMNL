@@ -2,9 +2,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-x1 = [1, -1]
-x2 = [-1, 1]
-p = 0
+x1 = [2, 4]
+x2 = [4, 2]
+p = 1
 z = np.arange(100)
 yy = []
 for z in np.arange(-50, 50, 1):

@@ -244,12 +244,14 @@ class Simulator(object):
     def simulate_consumer(self, num_cons):
         self.num_cons = num_cons
         self.type_dict = {}
+        self.member = defaultdict(list)
 
         for i in range(num_cons):
             tp = self.pop.cluster_id[
                 int(np.random.choice(self.pop.num_type, 1, p=self.pop.alpha))
             ]
             self.type_dict[i] = tp
+            self.member[tp].append(i)
 
         ct = Counter(self.type_dict.values())
         type_res = [
@@ -292,9 +294,11 @@ class Simulator(object):
         self.data_hist = {}
         self.theoretical_market_share = {}
         self.simulated_market_share = {}
+        self.choice_prob_dict = {}
 
         for t, p in enumerate(self.exp_price):
             choice_prob_dict, ms = self.calculate_groud_truth(p)
+            self.choice_prob_dict[t] = choice_prob_dict
             self.theoretical_market_share[t] = ms
             sim_data = self.simulate_transaction(choice_prob_dict)
             self.data_hist[t] = sim_data
@@ -305,11 +309,13 @@ class Simulator(object):
 
         self.personal_cdf = {i: np.cumsum(np.mean([hist[i] for _, hist in self.data_hist.items()], axis=0)) for i in range(self.num_cons)}
 
+
 class Sampler(object):
 
-    def __init__(self, cdf_dict, type_dict, verbose=DEFAULT_VERBOSE):
+    def __init__(self, cdf_dict, type_dict, member, verbose=DEFAULT_VERBOSE):
         self.cdf_dict = cdf_dict
         self.type_dict = type_dict
+        self.member = member
         self.cdf_mat = np.array(list(self.cdf_dict.values()))
         self.score = pairwise_distances(self.cdf_mat, metric=lambda x, y: np.linalg.norm(x-y, ord=np.inf))
         # self.score = [[np.linalg.norm(vi-vj, ord=np.inf) for j, vj in self.cdf_dict.items()] for i, vi in self.cdf_dict.items()]
@@ -320,17 +326,119 @@ class Sampler(object):
         samp_prob = [samp_func(sj) for sj in self.score[seed]]
         samp_prob = [s / sum(samp_prob) for s in samp_prob]
         sample = np.random.choice(self.num_cons, size=num_samp, p=samp_prob)
-        self.logger.debug(self.type_dict[seed])
+        self.logger.debug(f"{seed}: {self.type_dict[seed]}")
         types = [self.type_dict[i] for i in sample]
         ct = Counter(types)
         print(ct)
-        return sample
+        return samp_prob, sample
 
-N = 10
-M
 
-sampler = Sampler(sim.personal_cdf, sim.type_dict, verbose=4)
-sampler.create_sample(0, 200, lambda x: 1-x)
+
+
+def main(ps, pop, N, K, M, d):
+    sim = Simulator(ps, pop, verbose=3)
+    sim.type_dict[0]
+    sim.run_experiments(np.random.uniform(low=0.5, high=1.5, size=(100, M)))
+    sim.choice_prob_dict
+    sim.theoretical_market_share
+    sim.simulated_market_share
+    sim.personal_cdf
+    np.linalg.norm(sim.personal_cdf[998] - sim.personal_cdf[999])
+
+sampler = Sampler(sim.personal_cdf, sim.type_dict, sim.member, verbose=4)
+beta_set = []
+seeds = []
+for _ in range(20):
+    seed = np.random.randint(sim.num_cons)
+    seeds.append(sim.type_dict[seed])
+    pp, ss = sampler.create_sample(seed, 200, lambda x: max(1-10*x, 1e-4))
+    # pp, ss = sampler.create_sample(np.random.randint(sim.num_cons), 200, lambda x: np.exp(-10*x))
+    res = minimize(lambda x: loss(x, sim, ss), np.random.rand(2), tol=1e-6)
+    print(res)
+    beta_set.append(res.x)
+
+for i, b in enumerate(beta_set):
+    print(seeds[i])
+    print(sim.ps.choice_prob_vec(b, [1,1]))
+
+sim.ps.choice_prob_vec([1,-1], [1,1])
+sim.ps.choice_prob_vec([-1,1], [1,1])
+
+sim.choice_prob_dict
+
+cmap = {"A": "red", "B": "green"}
+A = []
+B = []
+for i in range(20):
+    if seeds[i] == "A":
+        A.append(beta_set[i])
+    else:
+        B.append(beta_set[i])
+
+cho
+plt.vline()
+
+
+fig = plt.figure(figsize=(20,16))
+ax = fig.add_subplot(1, 1, 1, projection="3d")
+ax.view_init(elev=45.0, azim=45)
+ax.scatter(yy[:, 0], yy[:, 1], yy[:, 2], c="blue", alpha=0.25)
+ax.plot_surface(
+    np.array([[0, 1], [0, 0]]),
+    np.array([[0, 0], [1, 1]]),
+    np.array([[1, 0], [0, 0]]),
+    alpha=0.2,
+)
+for i in range(20):
+    ax.scatter(*(sim.ps.choice_prob_vec(beta_set[i], np.ones(2))), c=cmap[seeds[i]], alpha=0.25)
+
+ax.scatter(*sim.ps.choice_prob_vec(pop.preference_vec[0], np.ones(2)), c="orange")
+ax.scatter(*sim.ps.choice_prob_vec(pop.preference_vec[1], np.ones(2)), c="orange")
+
+def loss(x, sim, ss):
+    diff = [
+            np.mean(v[ss], axis=0) - sim.ps.choice_prob_vec(x, sim.exp_price[t])
+            for t, v in sim.data_hist.items()
+           ]
+    loss = np.sum([np.linalg.norm(d) ** 2 for d in diff])
+    return loss
+
+
+
+func = lambda x: np.linalg.norm(ms - sim.ps.choice_prob_vec(x, sim.exp_price[0])) ** 2
+for mth in ["Nelder-Mead", "CG", "BFGS"]:
+    res = minimize(func, np.random.rand(2), method=mth)
+    print(mth, res)
+res
+res.message
+
+np.mean([v for i, v in sim.personal_cdf.items() if i in A], axis=0)
+np.mean([v for i, v in sim.personal_cdf.items() if i in B], axis=0)
+sim.choice_prob_dict[3]
+ps.show_info()
+pop.show_info()
+A = np.array([i for i in range(1000) if sim.type_dict[i] == 'A'])
+B = np.array([i for i in range(1000) if sim.type_dict[i] == 'B'])
+sampler.score[A].shape
+A.shape
+B.shape
+
+pp, ss = sampler.create_sample(0, 200, lambda x: max(1-10*x, 5e-4))
+
+pp
+for i in range(1000):
+    print(i, sim.type_dict[i], sim.personal_cdf[i])
+sim.type_dict[0]
+sim.simulated_market_share
+sim.choice_prob_dict
+plt.ioff()
+plt.plot(np.arange(M+1), sim.choice_prob_dict[9]['A'])
+plt.plot(np.arange(M+1), sim.choice_prob_dict[9]['B'])
+print(sim.type_dict[0], np.mean(np.array(pp)[sim.member[sim.type_dict[0]]]))
+for tt in sim.member:
+    if tt != sim.type_dict[0]:
+        print(tt, np.mean(np.array(pp)[sim.member[tt]]))
+sampler.score
 
 len(sampler.score)
 

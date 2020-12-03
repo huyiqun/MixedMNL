@@ -132,15 +132,7 @@ class FrankWolfe(object):
             #  self.index_mask[-1] = 0
 
         return self.alpha_masked
-def main(ps, pop, N, K, M, d):
-    sim = Simulator(ps, pop, verbose=4)
-    sim.type_dict[0]
-    sim.run_experiments([[1,1]])
-    sim.run_experiments(np.random.uniform(low=0.5, high=1.5, size=(50, M)))
-    sim.theoretical_market_share
-    sim.simulated_market_share
-    sim.personal_cdf
-    np.linalg.norm(sim.personal_cdf[998] - sim.personal_cdf[999])
+
 
 class SubRegionFrankWolfe(object):
     """docstring for FrankWolfe"""
