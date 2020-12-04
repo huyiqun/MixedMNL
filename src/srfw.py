@@ -1,6 +1,8 @@
 import random
 random.seed(123)
+import string
 from collections import namedtuple, OrderedDict
+from typing import NamedTuple
 
 import numpy as np
 from scipy.optimize import minimize, linprog
@@ -17,10 +19,36 @@ from pricing_MIP import cost, Demand, Point
 CYCLE_SEP = "=" * 80 + "\n"
 EXP_SEP = "~" * 80 + "\n"
 DEFAULT_VERBOSE = 3
+
+
+params = Params(np.array([1,2]), np.array([[1,2],[1,2]]))
+params.show()
+
+class Params(namedtuple("Params", "alpha, beta", defaults=[None, None])):
+    __slots__ = ()
+
+    def show(self):
+        logger = ColoredLog("Params", verbose=DEFAULT_VERBOSE)
+        n = len(self.alpha)
+        index = [letter for letter in string.ascii_lowercase[:n]]
+        mat = self.alpha[:, np.newaxis]
+        header = ["alpha"]
+        if self.beta is not None:
+            n = len(self.beta[0])
+            mat = np.concatenate((mat, self.beta), axis=1)
+            header.extend([f"beta {i+1}" for i in range(n)])
+
+        logger.info(np.vstack((header, mat)), index=index)
+
+a = np.array([1,2])
+b = np.array([[3,4], [5,6]])
+params = Params(a, b)
+params = Params()
+params.show()
+
 class FrankWolfe(object):
-    def __init__(self, params, verbose=DEFAULT_VERBOSE):
-        self.logger = ColoredLog(self.__class__.name, verbose=verbose)
-        self.alpha = params.alpha
+    def __init__(self, params, sim, verbose=DEFAULT_VERBOSE):
+        self.params = Params(np.array([1]), np.array([]))
         self.exp = exp
         self.logger = ColoredLog(self.__class__.__name__, verbose=verbose)
         self.iter = 1
@@ -48,9 +76,16 @@ class FrankWolfe(object):
             [q for q, m in zip(self.choice_prob_mat, self.index_mask) if m == 1]
         )
 
-    def q_optimization(self, boundary_set):
+    def q_optimization(self, beta_set):
         """support finding"""
         self.logger.warning(f"Support Finding Step: optimizing v (iter: {self.iter})")
+        a = np.array([1,2])
+        b = np.array([3,4])
+        np.hstack((a,b))
+        sim.simulated_market_share
+        {t: [sim.ps.choice_prob_vec(b, p) for b in beta_set] for t,p in enumerate(sim.exp_price)}
+        beta_set
+        sim.ps.choice_prob_vec(pop.preference_vec[0], sim.exp_price[-1])
 
         if self.iter > 1:
             b_mat = np.transpose(list(self.choice_prob_mat) + boundary_set)

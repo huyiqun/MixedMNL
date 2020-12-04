@@ -345,7 +345,7 @@ def loss(x, sim, ss):
 def main(ps, pop, N, K, M, d):
     sim = Simulator(ps, pop, verbose=4)
     sim.type_dict[0]
-    sim.run_experiments(np.random.uniform(low=0.5, high=1.5, size=(500, M)))
+    sim.run_experiments(np.random.uniform(low=0.5, high=1.5, size=(300, M)))
     sim.run_experiments([[1,1]]*100)
     sim.choice_prob_dict
     sim.theoretical_market_share
@@ -365,7 +365,7 @@ for _ in range(20):
     pp, ss = sampler.create_sample(seed, 200, lambda x: max(1-10*x, 1e-4))
     # pp, ss = sampler.create_sample(np.random.randint(sim.num_cons), 200, lambda x: np.exp(-10*x))
     res = minimize(lambda x: loss(x, sim, ss), np.random.rand(2), tol=1e-6)
-    print(res)
+    # print(res)
     beta_set.append(res.x)
     estimators[tp].append(sim.ps.choice_prob_vec(res.x, np.ones(2)))
 
@@ -394,7 +394,7 @@ for T in np.arange(10, 510, 10):
     all_est[T] = estimators
 
 estimators
-plt.hist(np.asarray(estimators["A"])[:, 1])
+plt.hist(np.asarray(estimators["B"])[:, 1])
 
 xx = []
 yy = defaultdict(list)
