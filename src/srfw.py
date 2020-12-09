@@ -47,9 +47,10 @@ params = Params()
 params.show()
 
 class FrankWolfe(object):
-    def __init__(self, params, sim, verbose=DEFAULT_VERBOSE):
-        self.params = Params(np.array([1]), np.array([]))
-        self.exp = exp
+    def __init__(self, sim, verbose=DEFAULT_VERBOSE):
+        self.alpha = np.array([1])
+        self.params = Params(self.alpha, np.array([]))
+        self.sim = sim
         self.logger = ColoredLog(self.__class__.__name__, verbose=verbose)
         self.iter = 1
 
@@ -62,9 +63,6 @@ class FrankWolfe(object):
         self.calculated_market_share_g = self.calculate_market_share()
         self.converged = False
 
-    def calculate_market_share(self):
-        return np.dot(np.multiply(self.index_mask, self.alpha), self.choice_prob_mat)
-
 
     @property
     def alpha_masked(self):
@@ -76,31 +74,54 @@ class FrankWolfe(object):
             [q for q, m in zip(self.choice_prob_mat, self.index_mask) if m == 1]
         )
 
-    def q_optimization(self, beta_set):
+    def q_optimization(self, beta_set=None):
         """support finding"""
         self.logger.warning(f"Support Finding Step: optimizing v (iter: {self.iter})")
-        a = np.array([1,2])
-        b = np.array([3,4])
-        np.hstack((a,b))
-        sim.simulated_market_share
-        {t: [sim.ps.choice_prob_vec(b, p) for b in beta_set] for t,p in enumerate(sim.exp_price)}
-        beta_set
-        sim.ps.choice_prob_vec(pop.preference_vec[0], sim.exp_price[-1])
+        self.logger.info(self.learned_beta, caption="Current active beta")
 
-        if self.iter > 1:
-            b_mat = np.transpose(list(self.choice_prob_mat) + boundary_set)
-        else:
-            b_mat = np.transpose(list(boundary_set))
 
-        chk = np.transpose(b_mat)
+        if beta_set:
+            logger = ColoredLog(__name__)
+            self.logger.warning(np.asarray(beta_set), header = np.arange(len(beta_set[0])), index=list(map(str, np.arange(len(beta_set)))), caption="Candidate beta set")
+            for t, p in enumerate(sim.exp_price):
+                sim.ps.
+
+        x = np.arange(-5,5,0.1)
+        y = (2-0.5*x**2)**2
+        plt.plot(x, y)
+
+
+
+        if self.iter == 1:
+            self.beta = beta_set[0]
         self.logger.info(chk, header=exp.ps.pid_off, caption="Conv(Q) plus q(t-1)")
         m = len(chk)
         g_y_diff = self.calculated_market_share_g - self.exp.simulated_market_share
         c = np.dot(g_y_diff, b_mat)
-        A_eq = [np.ones(m)]
-        b_eq = [1]
+        current_beta = beta_set[:1]
+        alpha = [1]
+        pop.show_info()
+        coef = []
+        for b in beta_set[1:]:
+            gradient = 0
+            for t, p in enumerate(sim.exp_price):
+                # calculate current market share based on selected alpha & beta
+                qs = [ps.choice_prob_vec(bb, p) for bb in current_beta]
+                calculated_market_share = np.average(qs, axis=0, weights=alpha)
+                # gradient for price at time t
+                df = sim.simulated_market_share[t] - calculated_market_share
+                gradient += np.dot(df, ps.choice_prob_vec(b, p))
+            coef.append(gradient)
 
-        res = linprog(c, A_eq=A_eq, b_eq=b_eq, bounds=(0, 1))
+            # gradient = np.sum([np.dot(sim.simulated_market_share[t] - np.average([ps.choice_prob_vec(bb, p) for bb in current_beta], axis=0, weights=alpha), ps.choice_prob_vec(b, p)) for t,p in enumerate(sim.exp_price)])
+
+        m = len(beta_set)-1
+        A_eq = np.ones((1,m))
+        b_eq = [1]
+        beta_set[10]
+
+        from scipy.optimize import linprog
+        res = linprog(coef, A_eq=A_eq, b_eq=b_eq, bounds=(0, 1))
         if self.logger.level <= 10:
             print(res)
         q = np.dot(b_mat, res.x)
