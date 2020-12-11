@@ -1,236 +1,23 @@
 from collections import Counter, defaultdict, namedtuple, OrderedDict
+import pickle
 import numpy as np
 from sklearn.metrics import pairwise_distances
 from tabulate import tabulate
 from scipy.optimize import minimize, LinearConstraint, Bounds
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.cm as cm
 from simulate_util import Population, Product_Set
 from logging_util import ColoredLog
-from settings import VERBOSE, EXP_PER_CYC, SIM_PER_EXP, TRANS_PER_EXP, SAMPLE_RATIO
+from srfw import FrankWolfe, SubRegionFrankWolfe
+from plot import d3plot, compare_prob_est
+cmap = cm.get_cmap(name="Dark2")
+
 DEFAULT_VERBOSE = 3
-
-Params = namedtuple("Params", ["alpha", "beta"])
 old_settings = np.geterr()
-np.seterr(all="raise")
+np.seterr(over="raise")
+# np.seterr(all="raise")
 #  np.seterr(**old_settings)
-
-
-class Params(namedtuple("Params", ["alpha", "beta", "choice"], defaults=[None, None])):
-    __slots__ = ()
-
-    @property
-    def table(self):
-        mat = self.alpha[:, np.newaxis]
-        header = ["alpha"]
-        if self.beta is not None:
-            n = len(self.beta[0])
-            mat = np.concatenate((mat, self.beta), axis=1)
-            header.extend([f"beta {i+1}" for i in range(n)])
-        if self.choice is not None:
-            m = len(self.choice[0])
-            mat = np.concatenate((mat, self.choice), axis=1)
-            header.extend([f"product {j+1}" for j in range(m - 1)] + ["Offset"])
-
-        return np.vstack((header, mat))
-
-
-class Learning(object):
-    def __init__(self, product_set, population, verbose):
-        self.pop = population
-        self.ps = product_set
-
-        self.logger = ColoredLog(self.__class__.__name__, verbose=verbose)
-        self.logger.info("Creating Learning Process...")
-        #  self.logger.debug(self.ps.info)
-        #  self.logger.debug(self.pop.info)
-
-
-class OfflineLearning(Learning):
-    def __init__(self, product_set, population, num_exp, estimate_k=2, verbose=VERBOSE):
-        super().__init__(product_set, population, verbose=verbose)
-        self.converged = False
-        self.price_trace = [[p for p in self.ps.prices]]
-        self.trace_index = ["Initialization"]
-
-        if self.pop.num_type > 1:
-            k = estimate_k
-            self.params = Params(alpha=np.array([float(1) / k] * k))
-        else:
-            self.params = Params(alpha=np.array([1]))
-
-        self.logger.debug(self.params.table, caption="Init Params")
-
-        self.price_trace = []
-        self.simulated_market_share = []
-        self.tms = []
-        exp = Experiment(self.ps, self.pop)
-        max_T_allowed = num_exp
-        for t in range(max_T_allowed):
-            p = np.random.uniform(low=0.0, high=1.0, size=self.ps.num_prod)
-            self.logger.debug(f"Experiment {t} with price: {p}")
-            self.price_trace.append(p)
-            exp.ps.set_price(p)
-            exp.calculate_groud_truth()
-            exp.simulate()
-            exp.print_experiment_info()
-            self.simulated_market_share.append(exp.simulated_market_share)
-            self.tms.append(exp.theoretical_market_share)
-
-
-class OnlineLearning(Learning):
-    def __init__(self, product_set, population, estimate_k=2, verbose=VERBOSE):
-        super().__init__(product_set, population, verbose=verbose)
-        self.converged = False
-        self.price_trace = [[p for p in self.ps.prices]]
-        self.trace_index = ["Initialization"]
-
-        if self.pop.num_type > 1:
-            k = estimate_k
-            self.params = Params(alpha=np.array([float(1) / k] * k))
-        else:
-            self.params = Params(alpha=np.array([1]))
-
-        self.logger.debug(self.params.table, caption="Init Params")
-
-        self.logger.info("Adding Cycle 1...")
-        cycle = Cycle(self.ps, self.pop, self.params)
-        self.cycles = [cycle]
-        self.historical_data = [cycle.sim_data]
-
-    def add_learning_cycle(self, opt_price, params, num_exp=EXP_PER_CYC):
-        self.update(opt_price, params)
-
-        self.logger.info(f"Adding Cycle {len(self.cycles) + 1}...")
-        self.ps.set_price(opt_price)
-        cycle = Cycle(self.ps, self.pop, params, num_exp=num_exp)
-        self.cycles.append(cycle)
-        self.historical_data.append(cycle.sim_data)
-
-        return cycle
-
-    def update(self, new_price, params):
-        """This function is only called after pricing optimization finished"""
-        self.price_trace.append([p for p in new_price])
-        self.trace_index.append(f"Cycle {len(self.price_trace) - 1} Opt P")
-        self.params = params
-        self.get_current_learning_info()
-
-    def get_current_learning_info(self):
-        num_finished_cycle = len(self.trace_index) - 1
-        self.logger.info(f"Current phase: finished cycles: {num_finished_cycle}")
-        self.logger.info(
-            self.price_trace,
-            caption="Price Trace:",
-            header=self.ps.pid,
-            index=self.trace_index,
-        )
-        self.logger.info(self.params.table, caption="end of previous cycle params")
-
-
-class Cycle(object):
-    def __init__(
-        self, product_set, population, params, num_exp=EXP_PER_CYC, verbose=VERBOSE
-    ):
-        self.ps = product_set
-        self.pop = population
-        self.current_price = [p for p in self.ps.prices]
-        self.params = params
-
-        self.logger = ColoredLog(self.__class__.__name__, verbose=verbose)
-        self.logger.info(f"Setting up {num_exp} independent experiments...")
-        #  exp = Experiment(self.ps, self.pop)
-        #  exp.experiment_info
-
-        # experiment data
-        self.exp_price = OrderedDict()
-        self.experiments = OrderedDict()
-        self.sim_ms = []
-        self.sim_data = OrderedDict()
-        self.trans_mat = OrderedDict()
-
-        # estimation data
-        #  self.estimated_beta = OrderedDict()
-        #  self.estimated_alpha = OrderedDict()
-        self.estimated_beta = []
-        self.estimated_alpha = []
-        self.estimate_keep = []
-
-        for u in range(num_exp):
-            exp = self.add_experiment()
-            self.experiments[u] = exp
-            self.exp_price[u] = exp.ps.prices
-            self.sim_ms.append(exp.simulated_market_share)
-            self.sim_data[u] = exp.sim_data
-            self.trans_mat[u] = exp.transaction_data_matrix
-            for l in range(SIM_PER_EXP):
-                alpha_hat, beta_hat = self.alpha_beta_estimate(
-                    exp.transaction_data_matrix
-                )
-                for a, b in zip(alpha_hat, beta_hat):
-                    self.estimated_alpha.append(a)
-                    self.estimated_beta.append(tuple(b))
-                    if a > 0.95 and np.min(b) > 0.1:
-                        self.estimate_keep.append(True)
-                    else:
-                        self.estimate_keep.append(False)
-
-        chk = [
-            [self.estimated_alpha[i], self.estimated_beta[i], self.estimate_keep[i]]
-            for i in range(len(self.estimated_alpha))
-        ]
-        self.logger.debug(chk, header=["a", "b", "k"], caption="estimated")
-
-        #  self.list_exp_price()
-        self.reset_price()
-        self.construct_beta_set()
-        self.construct_boundary_set()
-
-    def add_experiment(self, prange=0.05):
-        delta = 0.1
-        random_perturb = np.random.uniform(
-            low=-1 * delta, high=delta, size=self.ps.num_prod
-        )
-        perturbed_price = self.current_price + random_perturb
-        self.ps.set_price(perturbed_price)
-        exp = Experiment(self.ps, self.pop)
-        exp.simulate()
-        return exp
-
-    def list_exp_price(self):
-        self.logger.info(
-            self.exp_price.values(),
-            caption="Experiment prices",
-            header=self.ps.pid,
-            index=[f"Experiment {k}" for k in range(len(self.exp_price))],
-        )
-
-    def check_exp_info(self, u):
-        k = len(self.params.alpha)
-        alpha_hat = self.estimated_alpha.get(u, [None] * k)
-        beta_hat = self.estimated_beta[u]
-
-        self.logger.info(
-            [self.exp_price[u]],
-            caption=f"Experiment {u} experiment price",
-            header=self.ps.pid,
-        )
-        tmp_params = Params(alpha_hat, beta_hat)
-        self.logger.info(tmp_params)
-
-        return exp
-
-
-    def construct_beta_set(self):
-        betas = np.array(self.estimated_beta)
-        beta_mask = np.array(self.estimate_keep)
-        self.beta_set = betas[beta_mask]
-
-    def construct_boundary_set(self):
-        self.boundary_set = []
-        for b in self.beta_set:
-            self.boundary_set.append(self.ps.choice_prob_vec(b))
-
-    def reset_price(self):
-        self.ps.set_price(self.current_price)
 
 
 class Simulator(object):
@@ -329,11 +116,15 @@ class Sampler(object):
         self.logger.debug(f"{seed}: {self.type_dict[seed]}")
         types = [self.type_dict[i] for i in sample]
         ct = Counter(types)
+        purity = ct.most_common()[0][1]/num_samp
         print(ct)
-        return samp_prob, sample
+        print(purity)
+        return samp_prob, sample, purity
 
+a = [1,1,2,1,2,1,2]
+Counter(a).most_common(1)[0]
 
-def loss(x, sim, ss):
+def mle_loss(x, sim, ss):
     diff = [
             np.mean(v[ss], axis=0) - sim.ps.choice_prob_vec(x, sim.exp_price[t])
             for t, v in sim.data_hist.items()
@@ -341,174 +132,152 @@ def loss(x, sim, ss):
     loss = np.sum([np.linalg.norm(d) ** 2 for d in diff])
     return loss
 
+def closest(true_q, q):
+    dist = [np.linalg.norm(tq - q) for tq in true_q]
+    return np.argmin(dist)
 
-def main(ps, pop, N, K, M, d):
-    sim = Simulator(ps, pop, verbose=4)
-    sim.type_dict[0]
-    sim.run_experiments(np.random.uniform(low=0.5, high=1.5, size=(300, M)))
-    sim.run_experiments([[1,1]]*100)
-    sim.choice_prob_dict
-    sim.theoretical_market_share
-    sim.simulated_market_share
-    sim.personal_cdf
-    np.linalg.norm(sim.personal_cdf[998] - sim.personal_cdf[999])
-
-sampler = Sampler(sim.personal_cdf, sim.type_dict, sim.member, verbose=4)
-beta_set = []
-seeds = []
-estimators = defaultdict(list)
-
-for _ in range(20):
-    seed = np.random.randint(sim.num_cons)
-    tp = sim.type_dict[seed]
-    seeds.append(tp)
-    pp, ss = sampler.create_sample(seed, 200, lambda x: max(1-10*x, 1e-4))
-    # pp, ss = sampler.create_sample(np.random.randint(sim.num_cons), 200, lambda x: np.exp(-10*x))
-    res = minimize(lambda x: loss(x, sim, ss), np.random.rand(2), tol=1e-6)
-    # print(res)
-    beta_set.append(res.x)
-    estimators[tp].append(sim.ps.choice_prob_vec(res.x, np.ones(2)))
-
-estimators["A"]
-estimators["B"]
-
-sim = Simulator(ps, pop, verbose=4)
+sim = Simulator(ps, pop, num_cons=N, verbose=3)
+exp_price = np.random.uniform(low=0.5, high=1.5, size=(T, M))
+seeds = np.random.choice(N, size=50, replace=False)
+Counter([sim.type_dict[s] for s in seeds])
+rand_price = [round(p, 2) for p in np.random.uniform(low=0.5, high=3, size=ps.num_prod)]
+save_res = defaultdict(list)
 all_est = {}
+purity_res = []
 
-T = 300
-for T in np.arange(10, 510, 10):
-    sim.run_experiments(np.random.uniform(low=0.5, high=1.5, size=(T, M)))
-    sampler = Sampler(sim.personal_cdf, sim.type_dict, sim.member, verbose=4)
-    beta_set = []
-    seeds = []
-    estimators = defaultdict(list)
+np.save(os.path.join(exp_dir, "purity.npy"), purity_res)
+with open(os.path.join(exp_dir, "min_dist.pkl"), "wb") as f:
+    pickle.dump(save_res, f)
 
-    for _ in range(20):
-        seed = np.random.randint(sim.num_cons)
-        tp = sim.type_dict[seed]
-        seeds.append(tp)
-        pp, ss = sampler.create_sample(seed, 200, lambda x: max(1-10*x, 1e-4))
-        res = minimize(lambda x: loss(x, sim, ss), np.random.rand(2), tol=1e-6)
-        beta_set.append(res.x)
-        estimators[tp].append(sim.ps.choice_prob_vec(res.x, np.ones(2)))
-    all_est[T] = estimators
+TT = np.arange(150, 170, 10)
+for T in TT:
+    run(ps, pop, sim, exp_price[:T], rand_price, seeds, save_res, all_est, purity_res, generate_plot=False)
 
-estimators
-plt.hist(np.asarray(estimators["B"])[:, 1])
+plt.plot(np.arange(10, 170, 10), save_res["fw"], label="FW")
+plt.plot(np.arange(10, 170, 10), save_res["srfw"], label="SRFW")
+plt.xlabel("Experiment")
+plt.ylabel("Average Dist to Closest True Choice Prob")
+plt.legend
+plt.savefig(os.path.join(exp_dir, "min_dist.png"))
 
-xx = []
-yy = defaultdict(list)
-for t, dic in all_est.items():
-    xx.append(t)
-    for tp, vec in pop.preference_dict.items():
-        tr = ps.choice_prob_vec(vec, np.ones(2))
-        tse = np.mean([np.linalg.norm(tr - ee) ** 2 for ee in dic[tp]])
-        yy[tp].append(tse)
+plt.plot(np.arange(10, 170, 10), purity_res)
+plt.xlabel("Experiment")
+plt.ylabel("Average Subsample Purity")
+plt.savefig(os.path.join(exp_dir, "purity.png"))
 
-
+plt.plot(range(T), save_res["fw"], label="FW")
+plt.plot(range(T), save_res["srfw"], label="SRFW")
+plt.xlabel("Experiment")
+plt.ylabel("Average Min Dist to Closest True q")
+plt.legend()
+plt.savefig(os.path.join(exp_dir, "dist.png"))
 for t, e in yy.items():
     plt.plot(xx, e, label=f"Type {t}")
     plt.xlabel("Number of Experiments")
     plt.ylabel("MSE for MNL Estimation")
 plt.legend()
 
+def run(ps, pop, sim, exp_price, rand_price, seeds, save_res, all_est, purity_res, generate_plot=False):
+    sim.run_experiments(exp_price)
+    sampler = Sampler(sim.personal_cdf, sim.type_dict, sim.member, verbose=3)
 
-def f():
-    return
+    beta_set = []
+    valid_seeds = []
+    purity = []
+    # for tp, mem in sim.member.items():
+        # print(tp)
+        # while Counter(seeds)[tp] < 2:
+    # while len(np.unique(seeds)) < K:
+    for seed in seeds:
+        # seed = np.random.choice(sim.member[tp])
+        tp = sim.type_dict[seed]
+        pp, ss, pure = sampler.create_sample(seed, 200, lambda x: max(1-15*x, 1e-4))
+        # pp, ss = sampler.create_sample(np.random.randint(sim.num_cons), 200, lambda x: np.exp(-10*x))
+        res = minimize(lambda x: mle_loss(x, sim, ss), np.random.rand(ps.num_feat), tol=1e-4)
+        if res.success:
+            valid_seeds.append(tp)
+            beta_set.append(res.x)
+            purity.append(pure)
 
+    estimators = defaultdict(list)
+    for tp, b in zip(valid_seeds, beta_set):
+        estimators[tp].append(sim.ps.choice_prob_vec(b, rand_price))
 
+    bscopy = np.copy(beta_set)
+    all_est[len(exp_price)] = bscopy
+    purity_res.append(np.mean(purity))
 
-    def print_simulate_info(self):
-        self.logger.debug(f"Simulated transactions: {self.num_transaction}")
-        self.logger.debug(
-            [self.simulated_market_share],
-            header=self.ps.pid + ["Offset"],
-            index=["Simulated Market Share"],
-        )
+    fw = FrankWolfe(sim, verbose=3)
+    fw.run()
 
-            # self.personal_cdf[i][purchase_decision]
-    def print_experiment_info(self):
-        self.logger.debug(
-            [self.ps.prices], header=self.ps.pid, index=["Experiment Price"]
-        )
+    beta_set = np.copy(bscopy)
+    srfw = SubRegionFrankWolfe(sim, verbose=3)
+    srfw.run(beta_set)
 
-        self.logger.debug(
-            [self.theoretical_market_share],
-            header=self.ps.pid_off,
-            index=["Theoretical Market Share"],
-        )
-        self.logger.debug(self.choice_prob_dict, header="keys", caption="Ground truth")
+    if generate_plot:
+        # plot 1
+        true_q = np.asarray([ps.choice_prob_vec(p, rand_price) for p in pop.preference_vec])
+        d3plot(ps, pop, rand_price, beta_set, exp_dir, value_range=20, granularity=10, single=True)
+        # plot 2
+        fig, ax = plt.subplots(len(estimators), 1, sharex=True, figsize=(6, 2*len(estimators)+1))
+        for i, t in enumerate(estimators.keys()):
+            ground_truth = ps.choice_prob_vec(pop.preference_dict[t], rand_price)
+            compare_prob_est(estimators, t, ground_truth, ps, ax[i])
+            plt.tight_layout()
+        lgd = plt.legend(bbox_to_anchor=(1,1.1), loc="upper left")
+        plt.savefig(os.path.join(exp_dir, "type.png"), bbox_extra_artists=(lgd,), bbox_inches='tight')
+        # plot 3
+        d3plot_result(ps, pop, rand_price, exp_dir, fw, srfw)
 
-    def alpha_beta_estimate(self, alpha, sample_percent=SAMPLE_RATIO):
-        num_type = len(alpha)
-        num_features = len(self.pop.preference_vec[0])
-        n = self.num_transaction * sample_percent
+    dist_fw = []
+    dist_srfw = []
+    for t, p in enumerate(sim.exp_price):
+        true_q = [ps.choice_prob_vec(b, p) for b in pop.preference_vec]
+        dist = np.mean([np.linalg.norm(true_q[closest(true_q, ps.choice_prob_vec(b, p))]-ps.choice_prob_vec(b, p)) for b in fw.active_beta])
+        dist_fw.append(dist)
+        dist = np.mean([np.linalg.norm(true_q[closest(true_q, ps.choice_prob_vec(b, p))]-ps.choice_prob_vec(b, p)) for b in srfw.active_beta])
+        dist_srfw.append(dist)
 
-        sub_trans = self.transaction_data_matrix[
-            np.random.choice(self.num_transaction, int(n), replace=True)
-        ]
-        sub_ms = np.mean(sub_trans, axis=0)
-        #  print(sub_ms)
-        #  self.experiment_info
-
-        def obj(beta):
-            y = np.reshape(beta, (num_type, (num_features + 1)))
-            alpha = y[:, 0][:, np.newaxis]
-            x = y[:, 1:]
-            q = np.array([self.ps.choice_prob_vec(i) for i in x])
-            calculated_market_share = np.sum(alpha * q, axis=0)
-            diff = sub_ms - calculated_market_share
-            #  diff = self.simulated_market_share - calculated_market_share
-            return np.linalg.norm(diff) ** 2
-
-        flen = num_type * (num_features + 1)
-        x0 = map(float, np.random.randint(-5, 6, size=(flen,)))
-        lb = np.array([-np.inf] * flen)
-        ub = np.array([np.inf] * flen)
-        A = np.zeros(flen)
-        for i in range(num_type):
-            lb[i * (num_features + 1)] = 0
-            ub[i * (num_features + 1)] = 1
-            A[i * (num_features + 1)] = 1
-
-        bnds = Bounds(lb, ub)
-        cons = LinearConstraint(A, 1, 1)
-
-        init = np.array(list(x0))
-        np.seterr(all="ignore")
-        res = minimize(obj, init, bounds=bnds, constraints=cons, tol=1e-6)
-        np.seterr(all="raise")
-        #  self.logger.info(beta_hat)
-        ans = np.reshape(res.x, (num_type, (num_features + 1)))
-        alpha_hat, beta_hat = ans[:, 0], ans[:, 1:]
-
-        return alpha_hat, beta_hat
+    ave_fw = np.mean(dist_fw)
+    ave_srfw = np.mean(dist_srfw)
+    save_res["fw"].append(ave_fw)
+    save_res["srfw"].append(ave_srfw)
 
 
-if __name__ == "__main__":
-    cons_data = "consumer.csv"
-    prod_data = "product.csv"
-    pop = Population.from_data(cons_data)
-    ps = Product_Set.from_data(prod_data)
+# sim = Simulator(ps, pop, verbose=4)
+# all_est = {}
 
-    exp = Experiment(ps, pop)
-    exp.simulate()
+# def investigate_num_exp():
+    # T = 300
+    # for T in np.arange(10, 510, 10):
+        # sim.run_experiments(np.random.uniform(low=0.5, high=1.5, size=(T, M)))
+        # sampler = Sampler(sim.personal_cdf, sim.type_dict, sim.member, verbose=4)
+        # beta_set = []
+        # seeds = []
+        # estimators = defaultdict(list)
 
-    #  def beta_estimate(self, alpha):
-    #  alpha = np.array(alpha)[:, np.newaxis]
-    #  num_type = len(alpha)
-    #  num_features = len(self.pop.preference_vec[0])
+        # for _ in range(20):
+            # seed = np.random.randint(sim.num_cons)
+            # tp = sim.type_dict[seed]
+            # seeds.append(tp)
+            # pp, ss = sampler.create_sample(seed, 200, lambda x: max(1-10*x, 1e-4))
+            # res = minimize(lambda x: mle_loss(x, sim, ss), np.random.rand(2), tol=1e-6)
+            # beta_set.append(res.x)
+            # estimators[tp].append(sim.ps.choice_prob_vec(res.x, np.ones(2)))
+        # all_est[T] = estimators
 
-    #  def obj(beta):
-    #  x = np.reshape(beta, (num_type, num_features))
-    #  q = np.array([self.ps.choice_prob_vec(i) for i in x])
-    #  calculated_market_share = np.sum(alpha * q, axis=0)
-    #  diff = self.simulated_market_share - calculated_market_share
-    #  return np.linalg.norm(diff) ** 2
+    # estimators
+    # plt.hist(np.asarray(estimators["B"])[:, 1])
 
-    #  x0 = map(float, np.random.randint(-5, 6, size=(num_type * num_features,)))
-    #  init = np.array(list(x0))
-    #  beta_hat = minimize(obj, init, tol=1e-3)
-    #  self.logger.info(beta_hat)
+    # xx = []
+    # yy = defaultdict(list)
+    # for t, dic in all_est.items():
+        # xx.append(t)
+        # for tp, vec in pop.preference_dict.items():
+            # tr = ps.choice_prob_vec(vec, np.ones(2))
+            # tse = np.mean([np.linalg.norm(tr - ee) ** 2 for ee in dic[tp]])
+            # yy[tp].append(tse)
 
-    #  return np.reshape(beta_hat.x, (num_type, num_features))
+
+
+

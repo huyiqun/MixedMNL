@@ -20,7 +20,6 @@ sys.path.append(os.path.join(project_root, "src"))
 # import logging_util
 from logging_util import ColoredLog
 from simulate_util import Population, Product_Set
-from srfw import SubRegionFrankWolfe
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--exp_dir", type=str, help="experiment save directory")
@@ -50,7 +49,7 @@ parser.set_defaults(
         )
 
 # args = parser.parse_args()
-arg_str = shlex.split("-v")
+arg_str = shlex.split("-v --simulate --num_type 4 --num_feat 10 --num_cons 2000")
 args = parser.parse_args(arg_str)
 
 VERBOSE = args.verbose
@@ -61,8 +60,21 @@ if args.simulate:
     d = args.num_feat
     exp_name = f"K-{K}-M-{M}-d-{d}"
     exp_dir = os.path.join(project_root, "experiments", exp_name)
+
     pop = Population.from_sim(num_type=K, num_feat=d, verbose=VERBOSE)
+    min_alpha = min(pop.alpha)
+    while min_alpha < 0.1:
+        pop = Population.from_sim(num_type=K, num_feat=d, verbose=VERBOSE)
+
     ps = Product_Set.from_sim(num_prod=M, num_feat=d, verbose=VERBOSE)
+    min_prob = np.min([ps.choice_prob_vec(p, np.ones(M)) for p in pop.preference_vec])
+    min_prob
+    tries = 0
+    while min_prob < 1e-3 and tries < 50:
+        ps = Product_Set.from_sim(num_prod=M, num_feat=d, verbose=VERBOSE)
+        min_prob = np.min([ps.choice_prob_vec(p, np.ones(M)) for p in pop.preference_vec])
+        tries += 1
+
     if args.save_data:
         if os.path.isdir(exp_dir):
             rmtree(exp_dir)
@@ -80,12 +92,6 @@ else:
     K = pop.num_type
     M = ps.num_prod
     d = ps.num_feat
-
-pop.__dict__
-pop.alpha
-vars(args)
-res = SubRegionFrankWolfe()
-
 
 
 # import yaml

@@ -44,11 +44,12 @@ class Population(object):
     def simulate(self, num_type, num_feat):
         self.cluster_id = [letter for letter in string.ascii_uppercase[:num_type]]
         self.num_type = num_type
-        rand_num = np.random.choice(range(10, 510, 20), num_type, replace=False)
+        rand_num = np.random.choice(np.arange(1, 5, 0.25), num_type, replace=False)
+        [x / sum(rand_num) for x in rand_num]
         self.alpha = [x / sum(rand_num) for x in rand_num]
         self.preference_dict = {}
         while True:
-            rand_data = np.random.uniform(low=0, high=2, size=(num_type, num_feat))
+            rand_data = np.random.uniform(low=-1, high=1, size=(num_type, num_feat))
             if len(np.unique(rand_data, axis=0)) == self.num_type:
                 self.preference_vec = rand_data.astype(float)
                 self.preference_dict = {self.cluster_id[i]: rand_data[i] for i in range(num_type)}
@@ -118,7 +119,7 @@ class Product_Set(object):
         self.num_prod = num_prod
         self.num_feat = num_feat
         while True:
-            rand_data = np.random.uniform(low=0, high=2, size=(num_prod, num_feat))
+            rand_data = np.random.uniform(low=-1, high=1, size=(num_prod, num_feat))
             if len(np.unique(rand_data, axis=0)) == self.num_prod:
                 self.features = rand_data.astype(float)
                 break
