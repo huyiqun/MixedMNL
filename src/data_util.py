@@ -1,4 +1,5 @@
 import string
+import warnings
 import numpy as np
 from scipy.special import logsumexp
 from logging_util import ColoredLog
@@ -10,11 +11,12 @@ class Population(object):
         if data:
             self.parse_data(data)
         else:
-            self.simulate(num_type, num_feat)
+            success = self.simulate(num_type, num_feat)
 
-        self.cid = [f"Type {letter}" for letter in self.cluster_id]
-        self.logger = ColoredLog(self.__class__.__name__, verbose=verbose)
-        self.show_info()
+        if data or success:
+            self.cid = [f"Type {letter}" for letter in self.cluster_id]
+            self.logger = ColoredLog(self.__class__.__name__, verbose=verbose)
+            self.show_info()
 
     @classmethod
     def from_data(cls, data, **kwargs):
@@ -45,15 +47,28 @@ class Population(object):
         self.cluster_id = [letter for letter in string.ascii_uppercase[:num_type]]
         self.num_type = num_type
         rand_num = np.random.choice(np.arange(1, 5, 0.25), num_type, replace=False)
-        [x / sum(rand_num) for x in rand_num]
+        # [x / sum(rand_num) for x in rand_num]
         self.alpha = [x / sum(rand_num) for x in rand_num]
-        self.preference_dict = {}
-        while True:
-            rand_data = np.random.uniform(low=-1, high=1, size=(num_type, num_feat))
-            if len(np.unique(rand_data, axis=0)) == self.num_type:
-                self.preference_vec = rand_data.astype(float)
-                self.preference_dict = {self.cluster_id[i]: rand_data[i] for i in range(num_type)}
-                break
+        min_alpha = min(self.alpha)
+        tries = 0
+        while min_alpha < 1 / (num_type+3) and tries < 200:
+            rand_num = np.random.choice(np.arange(1, 5, 0.25), num_type, replace=False)
+            self.alpha = [x / sum(rand_num) for x in rand_num]
+            tries += 1
+
+        if min_alpha < 1 / (num_type+3):
+            print("Pop simulation not successful, try again.")
+            return False
+        else:
+            self.preference_dict = {}
+            while True:
+                rand_data = np.random.uniform(low=-1, high=1, size=(num_type, num_feat))
+                if len(np.unique(rand_data, axis=0)) == self.num_type:
+                    self.preference_vec = rand_data.astype(float)
+                    self.preference_dict = {self.cluster_id[i]: rand_data[i] for i in range(num_type)}
+                    break
+
+            return True
 
     def show_info(self):
         num_feat = len(self.preference_vec[0])
@@ -130,20 +145,29 @@ class Product_Set(object):
         self.logger.info(self.features, caption="Product info", header=table_title, index=self.pid)
 
     def _exp_vec(self, weights, prices):
-        return [
+        return [0] + [
             np.dot(f, weights) - p
             for f, p in zip(self.features, prices)
         ]
 
     def _exp_calc(self, weights, prices):
         t = self._exp_vec(weights, prices)
-        expnom = [np.exp(i) for i in t]
-        expsum = logsumexp(t)
+        max_t = np.max(t)
+        expnom = [np.exp(i-max_t) for i in t]
+        # with warnings.catch_warnings(record=True) as w:
+            # warnings.simplefilter("error", RuntimeWarning)
+            # try:
+                # expnom = [np.exp(i) for i in t]
+            # except:
+                # print(weights)
+                # print([np.exp(i) for i in t])
+        expsum = logsumexp(t-max_t)
         return expnom, expsum
 
     def choice_prob_vec(self, weights, prices):
         v, s = self._exp_calc(weights, prices)
-        vec = [1 / (np.exp(s) + 1)] + [t / (np.exp(s) + 1) for t in v]
+        # vec = [1 / (np.exp(s) + 1)] + [t / (np.exp(s) + 1) for t in v]
+        vec = [t / np.exp(s) for t in v]
         return np.array(vec)
 
     def choice_prob(self, weights, prices, i):
