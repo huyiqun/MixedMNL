@@ -41,6 +41,7 @@ parser.add_argument("--num_feat", type=int, help="number of features")
 parser.add_argument("--sample_ratio", type=float, help="sample ratio")
 parser.add_argument("--default", help="use toy data", action="store_true")
 parser.add_argument("--guessK", type=int, help="predetermined K")
+parser.add_argument("--repeat", type=int, help="number of repetition")
 parser.add_argument("-v", "--verbose", action="count")
 
 parser.set_defaults(
@@ -50,10 +51,11 @@ parser.set_defaults(
         num_feat=10,
         sample_ratio=0.2,
         default=False,
+        repeat=1,
         verbose=3,
         )
 
-# arg_str = shlex.split("-v --num_type 5 --num_feat 10 --num_prod 10 --num_cons 2000")
+# arg_str = shlex.split("-v --num_type 5 --num_feat 10 --num_prod 10 --num_cons 2000 --guessK 3 --repeat 1")
 # args = parser.parse_args(arg_str)
 args = parser.parse_args()
 
@@ -107,40 +109,78 @@ cid = range(2000)
 guessK = args.guessK
 logger.info(f"Running EM for K={guessK}")
 
+# guessK = 3
 if os.path.isfile(os.path.join(exp_dir, "em", f"em_{guessK}.pkl")):
     with open(os.path.join(exp_dir, "em", f"em_{guessK}.pkl"), "rb") as f:
         em_res = pickle.load(f)
-    alpha_Ts = em_res[guessK]["alpha_Ts"]
-    beta_Ts = em_res[guessK]["beta_Ts"]
-    ptime_Ts = em_res[guessK]["ptime_Ts"]
-    dist_Ts = em_res[guessK]["dist_Ts"]
-    assert guessK == len(em_res[guessK]["alpha_Ts"][5][0])
-    logger.info(f"existing Ts: {em_res[guessK]['alpha_Ts'].keys()}")
-    TT = [tt for tt in np.arange(5,155,5) if tt not in em_res[guessK]["alpha_Ts"].keys()]
+    assert guessK == len(em_res[5]["alpha"][0][0])
 else:
     em_res = defaultdict(dict)
-    alpha_Ts = {}
-    beta_Ts = {}
-    ptime_Ts = {}
-    dist_Ts = {}
-    TT = np.arange(5,155,5)
 
-# alpha_Ts
-# em_res[3]["alpha_Ts"].keys()
-# em_res[3]["dist_Ts"].keys()
-# [len(v[0]) for v in em_res[5]["alpha_Ts"].values()]
-# [len(v) for v in em_res[5]["alpha_Ts"].values()]
-# [len(v[0]) for v in alpha_Ts.values()]
-# [len(v) for v in alpha_Ts.values()]
-# alpha_Ts.keys()
-# guessK = 5
-# with open(os.path.join(exp_dir, f"em_{guessK}.pkl"), "rb") as f:
+try:
+    num_runs = [len(em_res[tt]["alpha"]) for tt in range(5,155,5)]
+    min_run = np.min(num_runs)
+    max_run = max(args.repeat, np.max(num_runs))
+except KeyError:
+    min_run = 0
+    max_run = args.repeat
+
+logger.info(f"min run: {min_run}")
+logger.info(f"max run: {max_run}")
+
+while min_run != max_run:
+    TT = np.arange(5,155,5)[np.argwhere(num_runs == min_run).flatten()]
+    logger.info(f"Will run: {TT}")
+    for T in TT:
+        init_cl = {}
+        ind = list(cid)
+        np.random.shuffle(ind)
+        ending = [int(np.round(len(ind) * a)) for a in np.cumsum(alpha)]
+
+        init_cl[0] = ind[0:ending[0]]
+        for j in range(1, guessK):
+            init_cl[j] = ind[ending[j-1]:ending[j]]
+
+        alpha_rec, beta_rec, time_rec, dist_rec = em_run(T, init_cl)
+
+        if len(em_res[T]["alpha"]) != 0:
+            em_res[T]["alpha"].append(alpha_rec)
+            em_res[T]["beta"].append(beta_rec)
+            em_res[T]["ptime"].append(time_rec)
+            em_res[T]["dist"].append(dist_rec)
+        else:
+            em_res[T]["alpha"] = [alpha_rec]
+            em_res[T]["beta"] = [beta_rec]
+            em_res[T]["ptime"] = [time_rec]
+            em_res[T]["dist"] = [dist_rec]
+
+        print([len(a[0]) for a in em_res[T]["alpha"]])
+        print([len(a) for a in em_res[T]["alpha"]])
+
+        file_name = os.path.join(exp_dir, "em", f"em_{guessK}.pkl")
+        with open(file_name, "wb") as f:
+            pickle.dump(em_res, f, pickle.HIGHEST_PROTOCOL)
+
+    num_runs = [len(em_res[tt]["alpha"]) for tt in range(5,155,5)]
+    min_run = np.min(num_runs)
+    max_run = max(args.repeat, np.max(num_runs))
+
+# guessK=3
+# with open(os.path.join(exp_dir, "em", f"em_{guessK}.pkl"), "rb") as f:
     # em_res = pickle.load(f)
+# change = defaultdict(dict)
+# for T in np.arange(5,155,5):
+    # for k,v in em_res[guessK].items():
+        # print(T, k, v[T])
+        # change[T][k[:-3]] = [v[T]]
+# with open(os.path.join(exp_dir, "em", f"em_{guessK}.pkl"), "wb") as f:
+    # pickle.dump(change, f, pickle.HIGHEST_PROTOCOL)
 
-logger.info(f"Will run: {TT}")
 
-# for T in times:
-for T in TT:
+# T = 5
+# alpha_rec, beta_rec, time_rec, dist_rec = em_run(T)
+
+def em_run(T, init_cl):
     print(T)
     proc_time = []
     personal_data = {i: np.asarray([sim.data_hist[t][i] for t in range(T)]) for i in cid}
@@ -156,15 +196,6 @@ for T in TT:
     # check_A = [personal_data[i][t] for i in sim.member["A"] for t in range(T)]
     # res = minimize(lambda b: obj(b, check_A), np.random.rand(d), tol=1e-3)
     alpha = [1/guessK] * guessK
-
-    init_cl = {}
-    ind = list(cid)
-    # np.random.shuffle(ind)
-    ending = [int(np.round(len(ind) * a)) for a in np.cumsum(alpha)]
-
-    init_cl[0] = ind[0:ending[0]]
-    for j in range(1, guessK):
-        init_cl[j] = ind[ending[j-1]:ending[j]]
 
     ss = time.time()
     beta_est = {}
@@ -237,26 +268,14 @@ for T in TT:
             converged = True
         iter += 1
 
-    alpha_Ts[T] = alpha_prog
-    beta_Ts[T] = beta_prog
-    ptime_Ts[T] = proc_time
+    # alpha_Ts[T] = alpha_prog
+    # beta_Ts[T] = beta_prog
+    # ptime_Ts[T] = proc_time
 
     min_dist = np.mean(pairwise_distances_argmin_min([ps.choice_prob_vec(bb, p) for bb in beta_est.values()], [ps.choice_prob_vec(bb, p) for bb in pop.preference_vec])[1])
-    dist_Ts[T] = min_dist
+    # dist_Ts[T] = min_dist
 
-    em_res[guessK]["alpha_Ts"] = alpha_Ts
-    em_res[guessK]["beta_Ts"] = beta_Ts
-    em_res[guessK]["ptime_Ts"] = ptime_Ts
-    em_res[guessK]["dist_Ts"] = dist_Ts
-
-    with open(os.path.join(exp_dir, "em", f"em_{guessK}.pkl"), "wb") as f:
-        pickle.dump(em_res, f, pickle.HIGHEST_PROTOCOL)
-
-    print([len(v[0]) for v in em_res[guessK]["alpha_Ts"].values()])
-    print([len(v) for v in em_res[guessK]["alpha_Ts"].values()])
-# with open(os.path.join(exp_dir, "em", f"em_{guessK}.pkl"), "rb") as f:
-    # em_res = pickle.load(f)
-
+    return alpha_prog, beta_prog, proc_time, min_dist
 
 # for bb in beta_est.values():
     # plt.plot(np.arange(11), ps.choice_prob_vec(bb, p), '--')
