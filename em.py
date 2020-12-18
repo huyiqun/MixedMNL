@@ -114,6 +114,7 @@ if os.path.isfile(os.path.join(exp_dir, "em", f"em_{guessK}.pkl")):
     beta_Ts = em_res[guessK]["beta_Ts"]
     ptime_Ts = em_res[guessK]["ptime_Ts"]
     dist_Ts = em_res[guessK]["dist_Ts"]
+    assert guessK == len(em_res[guessK]["alpha_Ts"][5][0])
 else:
     em_res = defaultdict(dict)
     alpha_Ts = {}
