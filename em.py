@@ -135,11 +135,11 @@ while min_run != max_run:
         init_cl = {}
         ind = list(cid)
         np.random.shuffle(ind)
-        ending = [int(np.round(len(ind) * a)) for a in np.cumsum(alpha)]
+        prop = np.linspace(0, 1, guessK+1)
+        ending = [int(np.round(len(ind) * a)) for a in prop]
 
-        init_cl[0] = ind[0:ending[0]]
-        for j in range(1, guessK):
-            init_cl[j] = ind[ending[j-1]:ending[j]]
+        for j in range(1, guessK+1):
+            init_cl[j-1] = ind[ending[j-1]:ending[j]]
 
         alpha_rec, beta_rec, time_rec, dist_rec = em_run(T, init_cl)
 
