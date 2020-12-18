@@ -115,6 +115,7 @@ if os.path.isfile(os.path.join(exp_dir, "em", f"em_{guessK}.pkl")):
     ptime_Ts = em_res[guessK]["ptime_Ts"]
     dist_Ts = em_res[guessK]["dist_Ts"]
     assert guessK == len(em_res[guessK]["alpha_Ts"][5][0])
+    logger.info(f"existing Ts: {em_res[guessK]['alpha_Ts'].keys()}")
 else:
     em_res = defaultdict(dict)
     alpha_Ts = {}
@@ -135,7 +136,6 @@ else:
     # em_res = pickle.load(f)
 
 
-logger.info(f"existing Ts: {em_res[guessK]['alpha_Ts'].keys()}")
 TT = [tt for tt in np.arange(5,155,5) if tt not in em_res[guessK]["alpha_Ts"].keys()]
 logger.info(f"Will run: {TT}")
 
