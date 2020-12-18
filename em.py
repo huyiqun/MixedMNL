@@ -128,58 +128,6 @@ except KeyError:
 logger.info(f"min run: {min_run}")
 logger.info(f"max run: {max_run}")
 
-while min_run != max_run:
-    TT = np.arange(5,155,5)[np.argwhere(num_runs == min_run).flatten()]
-    logger.info(f"Will run: {TT}")
-    for T in TT:
-        init_cl = {}
-        ind = list(cid)
-        np.random.shuffle(ind)
-        prop = np.linspace(0, 1, guessK+1)
-        ending = [int(np.round(len(ind) * a)) for a in prop]
-
-        for j in range(1, guessK+1):
-            init_cl[j-1] = ind[ending[j-1]:ending[j]]
-
-        alpha_rec, beta_rec, time_rec, dist_rec = em_run(T, init_cl)
-
-        if len(em_res[T]["alpha"]) != 0:
-            em_res[T]["alpha"].append(alpha_rec)
-            em_res[T]["beta"].append(beta_rec)
-            em_res[T]["ptime"].append(time_rec)
-            em_res[T]["dist"].append(dist_rec)
-        else:
-            em_res[T]["alpha"] = [alpha_rec]
-            em_res[T]["beta"] = [beta_rec]
-            em_res[T]["ptime"] = [time_rec]
-            em_res[T]["dist"] = [dist_rec]
-
-        print([len(a[0]) for a in em_res[T]["alpha"]])
-        print([len(a) for a in em_res[T]["alpha"]])
-
-        file_name = os.path.join(exp_dir, "em", f"em_{guessK}.pkl")
-        with open(file_name, "wb") as f:
-            pickle.dump(em_res, f, pickle.HIGHEST_PROTOCOL)
-
-    num_runs = [len(em_res[tt]["alpha"]) for tt in range(5,155,5)]
-    min_run = np.min(num_runs)
-    max_run = max(args.repeat, np.max(num_runs))
-
-# guessK=3
-# with open(os.path.join(exp_dir, "em", f"em_{guessK}.pkl"), "rb") as f:
-    # em_res = pickle.load(f)
-# change = defaultdict(dict)
-# for T in np.arange(5,155,5):
-    # for k,v in em_res[guessK].items():
-        # print(T, k, v[T])
-        # change[T][k[:-3]] = [v[T]]
-# with open(os.path.join(exp_dir, "em", f"em_{guessK}.pkl"), "wb") as f:
-    # pickle.dump(change, f, pickle.HIGHEST_PROTOCOL)
-
-
-# T = 5
-# alpha_rec, beta_rec, time_rec, dist_rec = em_run(T)
-
 def em_run(T, init_cl):
     print(T)
     proc_time = []
@@ -276,6 +224,60 @@ def em_run(T, init_cl):
     # dist_Ts[T] = min_dist
 
     return alpha_prog, beta_prog, proc_time, min_dist
+
+
+while min_run != max_run:
+    TT = np.arange(5,155,5)[np.argwhere(num_runs == min_run).flatten()]
+    logger.info(f"Will run: {TT}")
+    for T in TT:
+        init_cl = {}
+        ind = list(cid)
+        np.random.shuffle(ind)
+        prop = np.linspace(0, 1, guessK+1)
+        ending = [int(np.round(len(ind) * a)) for a in prop]
+
+        for j in range(1, guessK+1):
+            init_cl[j-1] = ind[ending[j-1]:ending[j]]
+
+        alpha_rec, beta_rec, time_rec, dist_rec = em_run(T, init_cl)
+
+        if len(em_res[T]["alpha"]) != 0:
+            em_res[T]["alpha"].append(alpha_rec)
+            em_res[T]["beta"].append(beta_rec)
+            em_res[T]["ptime"].append(time_rec)
+            em_res[T]["dist"].append(dist_rec)
+        else:
+            em_res[T]["alpha"] = [alpha_rec]
+            em_res[T]["beta"] = [beta_rec]
+            em_res[T]["ptime"] = [time_rec]
+            em_res[T]["dist"] = [dist_rec]
+
+        print([len(a[0]) for a in em_res[T]["alpha"]])
+        print([len(a) for a in em_res[T]["alpha"]])
+
+        file_name = os.path.join(exp_dir, "em", f"em_{guessK}.pkl")
+        with open(file_name, "wb") as f:
+            pickle.dump(em_res, f, pickle.HIGHEST_PROTOCOL)
+
+    num_runs = [len(em_res[tt]["alpha"]) for tt in range(5,155,5)]
+    min_run = np.min(num_runs)
+    max_run = max(args.repeat, np.max(num_runs))
+
+# guessK=3
+# with open(os.path.join(exp_dir, "em", f"em_{guessK}.pkl"), "rb") as f:
+    # em_res = pickle.load(f)
+# change = defaultdict(dict)
+# for T in np.arange(5,155,5):
+    # for k,v in em_res[guessK].items():
+        # print(T, k, v[T])
+        # change[T][k[:-3]] = [v[T]]
+# with open(os.path.join(exp_dir, "em", f"em_{guessK}.pkl"), "wb") as f:
+    # pickle.dump(change, f, pickle.HIGHEST_PROTOCOL)
+
+
+# T = 5
+# alpha_rec, beta_rec, time_rec, dist_rec = em_run(T)
+
 
 # for bb in beta_est.values():
     # plt.plot(np.arange(11), ps.choice_prob_vec(bb, p), '--')
