@@ -209,6 +209,7 @@ def em_run(T, init_cl):
 
         beta_prog.append(list(beta_est.values()))
         proc_time.append(time.time() - ss)
+        print(f"iteration time: {time.time() - ss}")
 
         gap = [np.linalg.norm(ps.choice_prob_vec(beta_prog[-1][k], p) - ps.choice_prob_vec(beta_prog[-2][k], p))/(M+1) for k in range(guessK)]
         print(f"iter: {iter}, diff: {np.mean(gap)}")
@@ -239,21 +240,24 @@ while min_run != max_run:
         for j in range(1, guessK+1):
             init_cl[j-1] = ind[ending[j-1]:ending[j]]
 
+        ss = time.time()
         alpha_rec, beta_rec, time_rec, dist_rec = em_run(T, init_cl)
+        print(f"run time: {time.time()-ss}")
 
         if len(em_res[T]["alpha"]) != 0:
+            ss = time.time()
             em_res[T]["alpha"].append(alpha_rec)
             em_res[T]["beta"].append(beta_rec)
             em_res[T]["ptime"].append(time_rec)
             em_res[T]["dist"].append(dist_rec)
+            print(f"update time: {time.time()-ss}")
         else:
             em_res[T]["alpha"] = [alpha_rec]
             em_res[T]["beta"] = [beta_rec]
             em_res[T]["ptime"] = [time_rec]
             em_res[T]["dist"] = [dist_rec]
 
-        print([len(a[0]) for a in em_res[T]["alpha"]])
-        print([len(a) for a in em_res[T]["alpha"]])
+        print("each rep (K, iter): ", [(np.unique([len(ia) for ia in a]), len(a)) for a in em_res[T]["alpha"]])
 
         file_name = os.path.join(exp_dir, "em", f"em_{guessK}.pkl")
         with open(file_name, "wb") as f:
