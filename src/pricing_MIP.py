@@ -6,9 +6,9 @@ from math import fabs
 import numpy as np
 import xlrd
 import random  #########to generate random number
-from settings import NUM_PRODUCT
+# from settings import NUM_PRODUCT
 
-n = NUM_PRODUCT
+n = args.num_prod
 MaxIter = 100
 cost = np.zeros((n, 1))
 Demand = np.zeros((MaxIter, n + 1))

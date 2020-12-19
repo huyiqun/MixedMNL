@@ -31,9 +31,49 @@ for T in np.arange(5, 155, 5):
 
 
 from sklearn.metrics import pairwise_distances_argmin_min, pairwise_distances, pairwise_distances_argmin
+
+
+
+
+cid = range(2000)
+personal_data = {i: np.asarray([sim.data_hist[t][i] for t in range(T)]) for i in cid}
+data = np.asarray([np.transpose(v) for v in personal_data.values()])
+def log_likelihood(beta, alpha):
+    # data.shape
+    prob = np.asarray([ps.choice_prob_vec(bb, p) for bb in beta])
+    # prob.shape
+    Lnt = np.dot(prob, data)
+    # Lnt.shape
+    logLnt = np.log(Lnt)
+    # logLnt.shape
+    logKnt = np.sum(logLnt, axis=2)
+    # logKnt.shape
+    per_class = np.tensordot(np.asarray(alpha), logKnt, axes=(0,0))
+    total = np.sum(per_class)
+
+    return total
+
+for guessK in [3,4,5,6,7]:
+    with open(os.path.join(exp_dir, "em", f"em_{guessK}.pkl"), "rb") as f:
+        em_res = pickle.load(f)
+
+    for T in [50,100,150]:
+
+        beta = em_res[T]["beta"][0][-1]
+        alpha = em_res[T]["alpha"][0][-1]
+        LL = log_likelihood(beta, alpha)
+        num_var_k = (d + 1 ) * guessK - 1
+        num_obs = T * N
+        aic = 2 * num_var_k - -2 * LL
+        bic = np.log(num_obs) * num_var_k - 2 * LL
+        print(guessK, T, aic, bic)
+
 guessK = 5
 em_dict = {}
-for guessK in [3,4,5,6]:
+len(change[150]["beta"][0])
+len(change[150]["alpha"][0])
+em_dict[7]
+for guessK in [3,4,5,6,7]:
     if os.path.isfile(os.path.join(exp_dir, "em", f"em_{guessK}.pkl")):
         with open(os.path.join(exp_dir, "em", f"em_{guessK}.pkl"), "rb") as f:
             em_res = pickle.load(f)
@@ -41,12 +81,10 @@ for guessK in [3,4,5,6]:
     time_range = list(em_res.keys())
     rec = []
     for tt in time_range:
-        tt = 90
         min_dist = np.average(pairwise_distances_argmin_min([ps.choice_prob_vec(bb, p) for bb in em_res[tt]["beta"][0][-1]], [ps.choice_prob_vec(bb, p) for bb in pop.preference_vec])[1], weights=em_res[tt]["alpha"][0][-1])
         rec.append(min_dist)
     # rec = [np.mean(em_res[tt]["dist"]) for tt in time_range]
     em_dict[guessK] = (time_range, rec)
-    pop.alpha
 
 with plt.style.context("seaborn-paper"):
     for k,v in em_dict.items():
@@ -67,6 +105,16 @@ np.mean([t[1] for t in opt_time])
 plt.plot(times, purity)
 plt.xlabel("Number of transactions (T)")
 plt.ylabel(r"Average Subsample Purity")
+
+
+alphav = np.asarray(pop.alpha).reshape(-1, 1)
+alphav[0] * np.asarray([1,2])
+alphav.shape
+VC = np.asarray([ps._exp_vec(v, p) for v in pop.preference_vec]).T
+VC.shape
+optx, opt_price, opt_obj = optimization_MIP_mixedMNL_pulp(cost, Demand, Point, alphav, VC)
+
+
 
 import seaborn as sns
 import string

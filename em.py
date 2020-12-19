@@ -118,7 +118,8 @@ else:
     em_res = defaultdict(dict)
 
 # try:
-num_runs = [len(em_res[tt]["alpha"]) if tt in em_res else 0 for tt in range(5,155,5)]
+# num_runs = [len(em_res[tt]["alpha"]) if tt in em_res else 0 for tt in range(5,155,5)]
+num_runs = [len(em_res[tt]["alpha"]) if tt in em_res else 0 for tt in range(50,155,50)]
 min_run = np.min(num_runs)
 max_run = max(args.repeat, np.max(num_runs))
 # except KeyError:
@@ -133,9 +134,6 @@ def em_run(T, init_cl):
     proc_time = []
     personal_data = {i: np.asarray([sim.data_hist[t][i] for t in range(T)]) for i in cid}
     decision = np.asarray([[np.argwhere(personal_data[i][t]!=0)[0][0] for t in range(T)] for i in cid])
-    # decision.shape
-    # true_alpha = [sim.type_dict[kk] for kk in cid]
-    # [a/len(list(cid)) for a in Counter(true_alpha).values()]
 
     def obj(b, data):
         diff = [np.mean(data, axis=0) - ps.choice_prob_vec(b, p)]
@@ -153,17 +151,12 @@ def em_run(T, init_cl):
         beta_est[k] = res.x
     proc_time.append(time.time() - ss)
 
-    # for k in range(guessK):
-        # plt.plot(ps.choice_prob_vec(beta_est[k], p), label=f"est {k}")
-    # for k in range(K):
-        # plt.plot(ps.choice_prob_vec(pop.preference_vec[k], p), '--', label=f"true {k}")
-    # plt.legend()
 
     converged = False
     iter = 0
     max_iter = 20
     data = np.asarray([np.transpose(v) for v in personal_data.values()])
-    # data.shape
+    data.shape
     alpha_prog = [alpha]
     beta_prog = [list(beta_est.values())]
     while not converged and iter < max_iter:
@@ -228,7 +221,7 @@ def em_run(T, init_cl):
 
 
 while min_run != max_run:
-    TT = np.arange(5,155,5)[np.argwhere(num_runs == min_run).flatten()]
+    TT = np.arange(50,155,50)[np.argwhere(num_runs == min_run).flatten()]
     logger.info(f"Will run: {TT}")
     for T in TT:
         init_cl = {}
@@ -243,8 +236,6 @@ while min_run != max_run:
         ss = time.time()
         alpha_rec, beta_rec, time_rec, dist_rec = em_run(T, init_cl)
         print(f"run time: {time.time()-ss}")
-        LL = np.sum(0)
-        aic = 2 * (d + 1 ) * guessK - 2 * LL
 
         # if len(em_res[T]["alpha"]) != 0:
         if T in em_res:
@@ -266,7 +257,7 @@ while min_run != max_run:
         with open(file_name, "wb") as f:
             pickle.dump(em_res, f, pickle.HIGHEST_PROTOCOL)
 
-    num_runs = [len(em_res[tt]["alpha"]) for tt in range(5,155,5)]
+    num_runs = [len(em_res[tt]["alpha"]) for tt in range(50,155,50)]
     min_run = np.min(num_runs)
     max_run = max(args.repeat, np.max(num_runs))
 
