@@ -117,13 +117,13 @@ if os.path.isfile(os.path.join(exp_dir, "em", f"em_{guessK}.pkl")):
 else:
     em_res = defaultdict(dict)
 
-try:
-    num_runs = [len(em_res[tt]["alpha"]) for tt in range(5,155,5)]
-    min_run = np.min(num_runs)
-    max_run = max(args.repeat, np.max(num_runs))
-except KeyError:
-    min_run = 0
-    max_run = args.repeat
+# try:
+num_runs = [len(em_res[tt]["alpha"]) if tt in em_res else 0 for tt in range(5,155,5)]
+min_run = np.min(num_runs)
+max_run = max(args.repeat, np.max(num_runs))
+# except KeyError:
+    # min_run = 0
+    # max_run = args.repeat
 
 logger.info(f"min run: {min_run}")
 logger.info(f"max run: {max_run}")
@@ -243,8 +243,11 @@ while min_run != max_run:
         ss = time.time()
         alpha_rec, beta_rec, time_rec, dist_rec = em_run(T, init_cl)
         print(f"run time: {time.time()-ss}")
+        LL = np.sum(0)
+        aic = 2 * (d + 1 ) * guessK - 2 * LL
 
-        if len(em_res[T]["alpha"]) != 0:
+        # if len(em_res[T]["alpha"]) != 0:
+        if T in em_res:
             ss = time.time()
             em_res[T]["alpha"].append(alpha_rec)
             em_res[T]["beta"].append(beta_rec)
@@ -267,11 +270,12 @@ while min_run != max_run:
     min_run = np.min(num_runs)
     max_run = max(args.repeat, np.max(num_runs))
 
-# guessK=3
+# em_res[5]
+# guessK=5
 # with open(os.path.join(exp_dir, "em", f"em_{guessK}.pkl"), "rb") as f:
     # em_res = pickle.load(f)
 # change = defaultdict(dict)
-# for T in np.arange(5,155,5):
+# for T in np.arange(5,145,5):
     # for k,v in em_res[guessK].items():
         # print(T, k, v[T])
         # change[T][k[:-3]] = [v[T]]

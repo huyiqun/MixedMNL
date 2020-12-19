@@ -1,6 +1,7 @@
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
+plt.style.available
 # analysis
 times = []
 
@@ -8,14 +9,19 @@ min_dist_fw = []
 min_dist_srfw = []
 opt_time = []
 purity = []
-for T in np.arange(5, 300, 5):
+T = 10
+for T in np.arange(5, 155, 5):
     if os.path.isfile(os.path.join(exp_dir, f"result_{T}.pkl")):
         times.append(T)
         with open(os.path.join(exp_dir, f"result_{T}.pkl"), "rb") as f:
             res = pickle.load(f)
         dist_fw = np.mean([np.mean(md[1]) for md in res["dist_fw"]])
         # len(res["dist_fw"])
-        dist_srfw = np.mean([np.mean(md[1]) for md in res["dist_srfw"]])
+        dist_info = pairwise_distances_argmin_min([ps.choice_prob_vec(bb, p) for bb in res["srfw"].active_beta], [ps.choice_prob_vec(bb, p) for bb in pop.preference_vec])
+        dist_srfw = np.average(dist_info[1], weights=res["srfw"].active_alpha)
+        # res["srfw"].active_beta
+        # res["srfw"].active_alpha
+        # dist_srfw = np.mean([np.mean(md[1]) for md in res["dist_srfw"]])
 
         min_dist_fw.append(dist_fw)
         min_dist_srfw.append(dist_srfw)
@@ -23,11 +29,37 @@ for T in np.arange(5, 300, 5):
         opt_time.append((np.mean(res["fw"].q_opt_time), np.mean(res["srfw"].q_opt_time)))
         purity.append(res["purity"])
 
-plt.plot(times, min_dist_fw, label="FW")
-plt.plot(times, min_dist_srfw, label="SRFW")
-plt.xlabel("Number of transactions (T)")
-plt.ylabel(r"Average distance to closest true $q$")
-plt.legend()
+
+from sklearn.metrics import pairwise_distances_argmin_min, pairwise_distances, pairwise_distances_argmin
+guessK = 5
+em_dict = {}
+for guessK in [3,4,5,6]:
+    if os.path.isfile(os.path.join(exp_dir, "em", f"em_{guessK}.pkl")):
+        with open(os.path.join(exp_dir, "em", f"em_{guessK}.pkl"), "rb") as f:
+            em_res = pickle.load(f)
+
+    time_range = list(em_res.keys())
+    rec = []
+    for tt in time_range:
+        tt = 90
+        min_dist = np.average(pairwise_distances_argmin_min([ps.choice_prob_vec(bb, p) for bb in em_res[tt]["beta"][0][-1]], [ps.choice_prob_vec(bb, p) for bb in pop.preference_vec])[1], weights=em_res[tt]["alpha"][0][-1])
+        rec.append(min_dist)
+    # rec = [np.mean(em_res[tt]["dist"]) for tt in time_range]
+    em_dict[guessK] = (time_range, rec)
+    pop.alpha
+
+with plt.style.context("seaborn-paper"):
+    for k,v in em_dict.items():
+        plt.plot(v[0], v[1], label=f"EM (K={k})")
+
+    # plt.plot(times, min_dist_fw, label="FW")
+    plt.plot(times, min_dist_srfw, label="SRFW")
+    plt.xlabel("Number of transactions (T)")
+    plt.ylabel(r"Average distance to closest true $q$")
+    plt.legend()
+
+plt.show()
+plt.clf()
 
 np.mean([t[0] for t in opt_time])
 np.mean([t[1] for t in opt_time])
@@ -49,9 +81,13 @@ true_q = [ps.choice_prob_vec(p, rand_price) for p in pop.preference_vec]
 fw_q = [ps.choice_prob_vec(p, rand_price) for p in res["fw"].active_beta]
 srfw_q = [ps.choice_prob_vec(p, rand_price) for p in res["srfw"].active_beta]
 
+i=5
+[pairwise_distances_argmin_min([em_q[i]], em_q[:i]+em_q[i+1:]) for i in range(6)]
+
 boxplot(res["estimators"], pop, ps, rand_price, Counter(res["valid_seeds"]), ctype="A")
 boxplot(res["estimators"], pop, ps, rand_price, Counter(res["valid_seeds"]), ctype="all")
-mdsplot(true_q, fw_q, srfw_q)
+em_q = [ps.choice_prob_vec(bb, p) for bb in em_res[150]["beta"][0][-1]]
+mdsplot(true_q, em_q, srfw_q)
 
 # ecdf plots
 fig = plt.figure(figsize=(16,12))
@@ -270,3 +306,4 @@ ax2.plot([0,1],[0.95,0.95], transform=ax2.transAxes, **kw)
     # help="number of transactions per experiment",
     # default=1000,
 # )
+
