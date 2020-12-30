@@ -6,24 +6,23 @@ from math import fabs
 import numpy as np
 import xlrd
 import random  #########to generate random number
-# from settings import NUM_PRODUCT
 
-n = args.num_prod
-MaxIter = 100
-cost = np.zeros((n, 1))
-Demand = np.zeros((MaxIter, n + 1))
-for j in range(n + 1):
+
+def optimization_MIP_mixedMNL_pulp(alphav, VC, num_prod, MaxIter=100):
+
+    cost = np.zeros((num_prod, 1))
+    demand = np.zeros((MaxIter, num_prod + 1))
+    for j in range(num_prod + 1):
+        for i in range(MaxIter):
+            demand[i, j] = (i + 0.5) / 100
+
+    point = np.zeros((MaxIter, num_prod + 1))
+    for j in range(num_prod):
+        for i in range(MaxIter):
+            point[i, j] = -demand[i, j] * np.log(demand[i, j])
     for i in range(MaxIter):
-        Demand[i, j] = (i + 0.5) / 100
-Point = np.zeros((MaxIter, n + 1))
-for j in range(n):
-    for i in range(MaxIter):
-        Point[i, j] = -Demand[i, j] * np.log(Demand[i, j])
-for i in range(MaxIter):
-    Point[i, n] = (1 - Demand[i, n]) * np.log(Demand[i, n])
+        point[i, num_prod] = (1 - demand[i, num_prod]) * np.log(demand[i, num_prod])
 
-
-def optimization_MIP_mixedMNL_pulp(cost, demand, point, alphav, VC):
     # point = pointEst
     MaxIter, n = point.shape
     ########number of customer types
