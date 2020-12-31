@@ -46,17 +46,23 @@ class Population(object):
     def simulate(self, num_type, num_feat):
         self.cluster_id = [letter for letter in string.ascii_uppercase[:num_type]]
         self.num_type = num_type
-        rand_num = np.random.choice(np.arange(1, 5, 0.25), num_type, replace=False)
+        rand_num = np.random.choice(np.arange(1, 5, 0.05), num_type, replace=False)
         # [x / sum(rand_num) for x in rand_num]
         self.alpha = [x / sum(rand_num) for x in rand_num]
         min_alpha = min(self.alpha)
         tries = 0
-        while min_alpha < 1 / (num_type+3) and tries < 200:
-            rand_num = np.random.choice(np.arange(1, 5, 0.25), num_type, replace=False)
+        # print(min_alpha)
+        while min_alpha < 1 / (num_type+2):
+            rand_num = np.random.choice(np.arange(1, 8, 0.25), num_type, replace=True)
             self.alpha = [x / sum(rand_num) for x in rand_num]
+            min_alpha = min(self.alpha)
+            # print(rand_num)
+            # print(min_alpha)
             tries += 1
+            if tries % 50 == 0:
+                print("number of tries: ", tries)
 
-        if min_alpha < 1 / (num_type+3):
+        if min_alpha < 1 / (num_type+2):
             print("Pop simulation not successful, try again.")
             return False
         else:

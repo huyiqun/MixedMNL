@@ -139,10 +139,7 @@ def em_run(T, init_cl):
         diff = [np.mean(data, axis=0) - ps.choice_prob_vec(b, p)]
         return np.sum([np.linalg.norm(d) ** 2 for d in diff])
 
-    # check_A = [personal_data[i][t] for i in sim.member["A"] for t in range(T)]
-    # res = minimize(lambda b: obj(b, check_A), np.random.rand(d), tol=1e-3)
     alpha = [1/guessK] * guessK
-
     ss = time.time()
     beta_est = {}
     for k in range(guessK):
@@ -180,12 +177,6 @@ def em_run(T, init_cl):
 
         beta_est = {}
         for k in range(guessK):
-            # check_A=np.argwhere(cl==1).flatten()
-            # check_A = [i for i in range(300) if sim.type_dict[i] == "A"]
-            # check_A
-            # Counter([sim.type_dict[ii] for ii in check_A])
-            # h = [[1,0,0,0,0] for i in cid]
-            # k = 4
 
             def func(b, k):
                 log_original = -np.log(np.dot(ps.choice_prob_vec(b, p), data))
@@ -210,12 +201,7 @@ def em_run(T, init_cl):
             converged = True
         iter += 1
 
-    # alpha_Ts[T] = alpha_prog
-    # beta_Ts[T] = beta_prog
-    # ptime_Ts[T] = proc_time
-
     min_dist = np.mean(pairwise_distances_argmin_min([ps.choice_prob_vec(bb, p) for bb in beta_est.values()], [ps.choice_prob_vec(bb, p) for bb in pop.preference_vec])[1])
-    # dist_Ts[T] = min_dist
 
     return alpha_prog, beta_prog, proc_time, min_dist
 
@@ -237,7 +223,6 @@ while min_run != max_run:
         alpha_rec, beta_rec, time_rec, dist_rec = em_run(T, init_cl)
         print(f"run time: {time.time()-ss}")
 
-        # if len(em_res[T]["alpha"]) != 0:
         if T in em_res:
             ss = time.time()
             em_res[T]["alpha"].append(alpha_rec)
