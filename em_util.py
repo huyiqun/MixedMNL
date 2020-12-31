@@ -24,6 +24,7 @@ def log_likelihood(beta, alpha, sim):
     logKnt = np.sum(logLnt, axis=2)
     # logKnt.shape
     per_class = np.tensordot(np.asarray(alpha), logKnt, axes=(0,0))
+    # per_class.shape
     total = np.sum(per_class)
     return total
 
