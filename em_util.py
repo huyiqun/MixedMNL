@@ -34,6 +34,7 @@ def em_run(guessK, T, sim):
     pop = sim.pop
     p = sim.exp_price[0]
     d = ps.num_feat
+    M = ps.num_prod
 
     init_cl = {}
     np.random.shuffle(cid)
