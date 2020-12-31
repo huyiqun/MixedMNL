@@ -149,7 +149,7 @@ for s in exp_name_list:
         else:
             print(exp_name + f"-alg already exists in result, skipping")
 
-        for guessK in range(targetK-3, targetK+4):
+        for guessK in range(max(2, targetK-4), min(11, targetK+4)):
             if exp_name + f"-em-{guessK}" not in res_dict:
                 alpha, beta, ptime, dist = em_run(guessK, T, sim)
                 res_dict[exp_name + f"-em-{guessK}"]["alpha"] = alpha
