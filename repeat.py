@@ -149,7 +149,8 @@ for s in exp_name_list:
         else:
             print(exp_name + f"-alg already exists in result, skipping")
 
-        for guessK in range(max(2, targetK-4), min(11, targetK+4)):
+        # for guessK in range(max(2, targetK-4), min(11, targetK+4)):
+        for guessK in range(1, min(11, targetK+4)):
             if exp_name + f"-em-{guessK}" not in res_dict:
                 alpha, beta, ptime, dist = em_run(guessK, T, sim)
                 res_dict[exp_name + f"-em-{guessK}"]["alpha"] = alpha
@@ -174,18 +175,18 @@ for s in exp_name_list:
 
 # aic_dict = defaultdict(list)
 # bic_dict = defaultdict(list)
-# for s in exp_name_list:
-    # s = exp_name_list[20]
+# for s in exp_name_list[:-10]:
+    # # s = exp_name_list[20]
     # f1, f2 = s.split(",")
     # # targetK = args.targetK
     # targetK = 5
     # currentK = int(f1.split('-')[1])
     # exp_folder = os.path.join(exp_dir, f1, f2)
     # exp_name = "-".join([f1, f2])
-    # ps = Product_Set.from_data(os.path.join(exp_folder, "product.csv"))
-    # pop = Population.from_data(os.path.join(exp_folder, "consumer.csv"))
     # with open(os.path.join(exp_folder, "sim.pkl"), "rb") as f:
         # sim = pickle.load(f)
+    # ps = sim.ps
+    # pop = sim.pop
 
     # res_path = os.path.join(exp_dir, f1, "result.pkl")
     # with open(res_path, "rb") as f:
@@ -198,5 +199,8 @@ for s in exp_name_list:
             # bic_dict[(currentK, int(f2), gK)] = v["bic"]
 
     # res_dict.keys()
-    # beta = res_dict[exp_name+"-em-2"]["beta"][-1]
-    # alpha = res_dict[exp_name+"-em-2"]["alpha"][-1]
+    # guessK=5
+    # beta = res_dict[exp_name+f"-em-{guessK}"]["beta"][-1]
+    # alpha = res_dict[exp_name+f"-em-{guessK}"]["alpha"][-1]
+    # np.asarray(beta).shape
+    # np.asarray(alpha).shape
