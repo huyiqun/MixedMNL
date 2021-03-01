@@ -1,2 +1,2 @@
 # MixedMNL
-Non-parametric Estimation for Mixed MNL Models
+Non-parametric estimation for mixed MNL Models with unknown mixture weights
